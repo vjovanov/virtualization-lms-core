@@ -1,7 +1,7 @@
 import sbt._
 import java.io.File
 
-class Project(info: ProjectInfo) extends DefaultProject(info)
+class Project(info: ProjectInfo) extends DefaultProject(info) with AutoCompilerPlugins
 {
   
   // define a root-level environment file local.properties
@@ -36,9 +36,10 @@ class Project(info: ProjectInfo) extends DefaultProject(info)
 
 //  val scalac = "org.scala-lang" % "scala-compiler" % "2.8.0" % "test"
 //  val scala = "org.scala-lang" % "scala-library" % "2.8.0" % "test"
+  
+  val cont = compilerPlugin("org.scala-lang.plugins" % "continuations" % "2.9.0-SNAPSHOT")
 
-
-  // compile options
-  override def compileOptions = super.compileOptions ++ Seq(/*Unchecked, */Deprecation)
+  // compile options  
+  override def compileOptions = super.compileOptions ++ Seq(/*Unchecked, */Deprecation) ++ compileOptions("-P:continuations:enable")
 
 }
