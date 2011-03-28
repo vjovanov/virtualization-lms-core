@@ -18,9 +18,6 @@ trait Parsers { this: Matching with Extractors =>
 	case class Success(rest: Input) extends ParseResult
 	case class Failure() extends ParseResult
 
-  type Rep[+A]
-  implicit def unit[A:Manifest](x:A): Rep[A]
-
 
   object SuccessR {
     def apply(x: Rep[Input]): Rep[Success] = construct(classOf[Success], Success.apply, x)
@@ -28,7 +25,7 @@ trait Parsers { this: Matching with Extractors =>
   }
 
   object FailureR {
-    def apply(): Rep[Failure] = construct(classOf[Failure], (_: Unit) => Failure.apply(), ())
+    def apply(): Rep[Failure] = construct(classOf[Failure], (_: Unit) => Failure.apply(), unit(()))
     def unapply(x: Rep[Failure]): Boolean = deconstruct(classOf[Failure], { x:Failure => if (Failure.unapply(x)) Some(()) else None }, x).isDefined
   } // TODO: not so nice...
 

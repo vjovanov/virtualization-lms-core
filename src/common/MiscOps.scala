@@ -17,7 +17,7 @@ trait MiscOps extends Base {
   def exit(status: Int): Rep[Nothing] = exit(unit(status))
   def exit(): Rep[Nothing] = exit(0)
   def exit(status: Rep[Int]): Rep[Nothing]
-
+  def error(s: Rep[String]): Rep[Nothing]
   def returnL(x: Rep[Any]): Rep[Unit]
 }
 
@@ -27,17 +27,19 @@ trait MiscOpsExp extends MiscOps with EffectExp {
   case class Print(x: Exp[Any]) extends Def[Unit]
   case class PrintLn(x: Exp[Any]) extends Def[Unit]
   case class Exit(s: Exp[Int]) extends Def[Nothing]
+  case class Error(s: Exp[String]) extends Def[Nothing]
   case class Return(x: Exp[Any]) extends Def[Unit]
 
-  def print(x: Exp[Any]) = reflectEffect(Print(x))
-  def println(x: Exp[Any]) = reflectEffect(PrintLn(x))
+  def print(x: Exp[Any]) = reflectEffect(Print(x)) // TODO: simple effect
+  def println(x: Exp[Any]) = reflectEffect(PrintLn(x)) // TODO: simple effect
   def exit(s: Exp[Int]) = reflectEffect(Exit(s))
+  def error(s: Exp[String]) = reflectEffect(Error(s))
   def returnL(x: Exp[Any]) = reflectEffect(Return(x))
   
   override def mirror[A:Manifest](e: Def[A], f: Transformer): Exp[A] = (e match {
-    case Reflect(Print(x), Global(), es) => reflectMirrored(Reflect(Print(f(x)), Global(), f(es)))
-    case Reflect(PrintLn(x), Global(), es) => reflectMirrored(Reflect(PrintLn(f(x)), Global(), f(es)))
-    case Reflect(Exit(x), Global(), es) => reflectMirrored(Reflect(Exit(f(x)), Global(), f(es)))
+    case Reflect(Print(x), u, es) => reflectMirrored(Reflect(Print(f(x)), mapOver(f,u), f(es)))
+    case Reflect(PrintLn(x), u, es) => reflectMirrored(Reflect(PrintLn(f(x)), mapOver(f,u), f(es)))
+    case Reflect(Exit(x), u, es) => reflectMirrored(Reflect(Exit(f(x)), mapOver(f,u), f(es)))
     case _ => super.mirror(e,f)
   }).asInstanceOf[Exp[A]]
 }
@@ -51,6 +53,7 @@ trait ScalaGenMiscOps extends ScalaGenEffect {
     case Print(s) => emitValDef(sym, "print(" + quote(s) + ")")
     case Exit(a) => emitValDef(sym, "exit(" + quote(a) + ")")
     case Return(x) => emitValDef(sym, "return " + quote(x))
+    case Error(s) => emitValDef(sym, "error(" + quote(s) + ")")
     case _ => super.emitNode(sym, rhs)
   }
 }

@@ -78,11 +78,6 @@ trait BaseGenFunctions extends GenericNestedCodegen {
     case Lambda2(f, x1, x2, y) => x1 :: x2 :: effectSyms(y)
     case _ => super.boundSyms(e)
   }
-
-  override def getFreeVarNode(rhs: Def[Any]): List[Sym[Any]] = rhs match {
-    case Lambda(f, x, y) => getFreeVarBlock(y,List(x.asInstanceOf[Sym[Any]]))
-    case _ => super.getFreeVarNode(rhs)
-  }
 }
 
 trait ScalaGenFunctions extends ScalaGenEffect with BaseGenFunctions {
@@ -92,7 +87,13 @@ trait ScalaGenFunctions extends ScalaGenEffect with BaseGenFunctions {
     case e@Lambda(fun, x, y) =>
       stream.println("val " + quote(sym) + " = {" + quote(x) + ": (" + x.Type + ") => ")
       emitBlock(y)
-      stream.println(quote(getBlockResult(y)))
+      stream.println(quote(getBlockResult(y)) + ": " + y.Type)
+      stream.println("}")
+
+    case e@Lambda2(fun, x1, x2, y) =>
+      stream.println("val " + quote(sym) + " = { (" + quote(x1) + ": " + x1.Type + ", " + quote(x2) + ": " + x2.Type + ") => ")
+      emitBlock(y)
+      stream.println(quote(getBlockResult(y)) + ": " + y.Type)
       stream.println("}")
 
     case Apply(fun, arg) =>

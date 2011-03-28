@@ -7,7 +7,7 @@ import scala.virtualization.lms.internal.{GenericNestedCodegen, GenerationFailed
 
 trait RangeOps extends Base {
   // workaround for infix not working with manifests
-  implicit def repRangeToRangeOpsCls(r: Rep[Range]) = new rangeOpsCls(r)
+  implicit def repRangeToRangeOps(r: Rep[Range]) = new rangeOpsCls(r)
   class rangeOpsCls(r: Rep[Range]){
     def foreach(f: Rep[Int] => Rep[Unit]) = range_foreach(r, f)
   }
@@ -44,11 +44,12 @@ trait RangeOpsExp extends RangeOps with FunctionsExp {
       case Def(Until(start,end)) => (start,end)
       case _ => throw new Exception("unexpected symbol in RangeForeach")
     }
-    reflectEffect(RangeForeach(start, end, i, reifyEffects(block(i))))
+    val a = reifyEffects(block(i))
+    reflectEffect(RangeForeach(start, end, i, a), summarizeEffects(a).star)
   }
 
   override def mirror[A:Manifest](e: Def[A], f: Transformer): Exp[A] = (e match {
-    case Reflect(RangeForeach(s,e,i,b), Global(), es) => reflectMirrored(Reflect(RangeForeach(f(s),f(e),f(i).asInstanceOf[Sym[Int]],f(b)), Global(), f(es)))
+    case Reflect(RangeForeach(s,e,i,b), u, es) => reflectMirrored(Reflect(RangeForeach(f(s),f(e),f(i).asInstanceOf[Sym[Int]],f(b)), mapOver(f,u), f(es)))
     case _ => super.mirror(e,f)
   }).asInstanceOf[Exp[A]]
 }
@@ -65,12 +66,6 @@ trait BaseGenRangeOps extends GenericNestedCodegen {
   override def boundSyms(e: Any): List[Sym[Any]] = e match {
     case RangeForeach(start, end, i, y) => i :: effectSyms(y)
     case _ => super.boundSyms(e)
-  }
-
-
-  override def getFreeVarNode(rhs: Def[Any]): List[Sym[Any]] = rhs match {
-    case RangeForeach(start, end, i, body) => /*getFreeVarNode(start) ::: getFreeVarNode(end) ::: */getFreeVarBlock(body,List(i.asInstanceOf[Sym[Any]]))
-    case _ => super.getFreeVarNode(rhs)
   }
 }
 

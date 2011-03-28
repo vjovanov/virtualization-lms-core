@@ -8,13 +8,18 @@ trait GenericFatCodegen extends GenericNestedCodegen with FatScheduling {
   val IR: Expressions with Effects with FatExpressions
   import IR._  
   
-  case class Combine(a: List[Exp[Any]]) extends Exp[Any]
-
-  // these are needed by loop fusion. they should live elsewhere.
+  //  ------------------- these are needed by loop fusion. they should live elsewhere.
   def unapplySimpleIndex(e: Def[Any]): Option[(Exp[Any], Exp[Int])] = None
+  def unapplySimpleDomain(e: Def[Int]): Option[Exp[Any]] = None
   def unapplySimpleCollect(e: Def[Any]): Option[Exp[Any]] = None
+  def unapplySimpleCollectIf(e: Def[Any]): Option[(Exp[Any],List[Exp[Boolean]])] = unapplySimpleCollect(e).map((_,Nil))
+
+  def applyAddCondition(e: Def[Any], c: List[Exp[Boolean]]): Def[Any] = sys.error("not implemented")
+
   def shouldApplyFusion(currentScope: List[TTP])(result: Exp[Any]): Boolean = true
 
+  // -------------------
+  
 
   override def emitBlockFocused(result: Exp[Any])(implicit stream: PrintWriter): Unit = {
     var currentScope = innerScope.map(fatten)
@@ -51,6 +56,43 @@ trait GenericFatCodegen extends GenericNestedCodegen with FatScheduling {
     
     val levelScope = e1.filter(z => (e2 contains z) && !(g1 contains z)) // shallow (but with the ordering of deep!!) and minus bound
 
+    // sanity check to make sure all effects are accounted for
+    result match {
+      case Def(Reify(x, u, effects)) =>
+        val actual = levelScope.filter(_.lhs exists (effects contains _))
+        if (effects != actual.flatMap(_.lhs)) {
+          val expected = effects.map(d=>fatten(findDefinition(d.asInstanceOf[Sym[Any]]).get))
+          println("error: violated ordering of effects")
+          println("  expected:")
+          expected.foreach(d => println("    "+d))
+          println("  actual:")
+          actual.foreach(d => println("    "+d))
+          // stuff going missing because of stray dependencies is the most likely cause 
+          // so let's print some debugging hints
+          println("  missing:")
+          val missing = expected filterNot (actual contains _)
+          if (missing.isEmpty)
+            println("  note: there is nothing missing so the different order might in fact be ok (artifact of new effect handling? TODO)")          
+          missing.foreach { d => 
+            val inDeep = e1 contains d
+            val inShallow = e2 contains d
+            val inDep = g1 contains d
+            println("    "+d+" <-- inDeep: "+inDeep+", inShallow: "+inShallow+", inDep: "+inDep)
+            if (inDep) e1 foreach { z =>
+              val b = boundSyms(z.rhs)
+              if (b.isEmpty) "" else {
+                val g2 = getFatDependentStuff(currentScope)(b)
+                if (g2 contains d) {
+                  println("    depends on " + z + " (bound: "+b+")")
+                  val path = getFatSchedule(g2)(d)
+                  for (p <- path) println("      "+p)
+                }
+              }
+            }
+          }
+        }
+      case _ =>
+    }
 /*
     // sanity check to make sure all effects are accounted for
     result match {
@@ -84,6 +126,9 @@ trait GenericFatCodegen extends GenericNestedCodegen with FatScheduling {
     case ThinDef(a) => emitNode(sym(0), a)
     case _ => sys.error("don't know how to generate code for: "+rhs)
   }
+
+
+  case class Combine(a: List[Exp[Any]]) extends Exp[Any]
 
   def emitFatBlock(rhs: List[Exp[Any]])(implicit stream: PrintWriter): Unit = {
     emitBlock(Combine(rhs))
