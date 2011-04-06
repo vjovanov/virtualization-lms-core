@@ -37,9 +37,11 @@ class Project(info: ProjectInfo) extends DefaultProject(info) with AutoCompilerP
 //  val scalac = "org.scala-lang" % "scala-compiler" % "2.8.0" % "test"
 //  val scala = "org.scala-lang" % "scala-library" % "2.8.0" % "test"
   
-  val cont = compilerPlugin("org.scala-lang.plugins" % "continuations" % "2.9.0-SNAPSHOT")
+//  val cont = compilerPlugin("org.scala-lang.plugins" % "continuations" % "2.9.0-SNAPSHOT")
 
-  // compile options  
-  override def compileOptions = super.compileOptions ++ Seq(/*Unchecked, */Deprecation) ++ compileOptions("-P:continuations:enable")
-
+  // compile options  -Xpluginsdir ${build-quick.dir}/misc/scala-devel/plugins -Xplugin-require:continuations
+//  override def compileOptions = List() ++ compileOptions("-Xpluginsdir:/Users/tarq/scala-virtualized/build/pack/misc/scala-devel/plugins", "-Xplugin-require:continuations", "-P:continuations:enable", "-Xprint:selectiveanf", "-Ylog:selectiveanf")
+  override def compileOptions = super.compileOptions ++ compileOptions("-Xplugin:/Users/tarq/scala-virtualized/build/pack/misc/scala-devel/plugins/continuations.jar", "-P:continuations:enable")
+//  override def compileOptions = super.compileOptions ++ Seq(/*Unchecked, */Deprecation) ++ compileOptions("-P:continuations:enable")
+//  override def testCompileOptions = super.testCompileOptions ++ compileOptions("-Xplugin:/Users/tarq/scala-virtualized/build/pack/misc/scala-devel/plugins/continuations.jar", "-P:continuations:enable", "-Xprint:selectiveanf", "-Ylog:selectiveanf")
 }
