@@ -1,0 +1,9 @@
+object FooBar extends (Int => Any) {
+def apply(x0: Int) = {
+  val x1 = UNKNOWN: Times(Sym(0),Const(1.0))
+  val x2 = UNKNOWN: Times(Sym(1),Sym(1))
+  val x3 = UNKNOWN: Times(Sym(2),Sym(2))
+  val x4 = UNKNOWN: Times(Sym(3),Sym(3))
+  x4
+}
+}
