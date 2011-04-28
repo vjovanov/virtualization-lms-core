@@ -12,6 +12,7 @@ trait IfThenElse extends Base {
     case true => thenp
     case false => elsep
   }
+    
 }
 
 // TODO: it would be nice if IfThenElseExp would extend IfThenElsePureExp
@@ -32,6 +33,10 @@ trait IfThenElseExp extends IfThenElse with EffectExp {
   override def __ifThenElse[T:Manifest](cond: Rep[Boolean], thenp: => Rep[T], elsep: => Rep[T]) = {
     val a = reifyEffectsHere(thenp)
     val b = reifyEffectsHere(elsep)
+    ifThenElse(cond,a,b)
+  }
+
+  def ifThenElse[T:Manifest](cond: Rep[Boolean], a: Rep[T], b: Rep[T]) = {
     val ae = summarizeEffects(a)
     val be = summarizeEffects(b)
     reflectEffect(IfThenElse(cond,a,b), ae orElse be)

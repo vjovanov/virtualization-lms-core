@@ -79,11 +79,15 @@ trait FooBarExp {
   
   // --- analysis
 
+  // forward dataflow analyis
+  // alternative: effect abstraction. but: need to
+  
   abstract class State
   
   def stateOrElse(a: State, b: State): State = a
   def stateAndAlso(a: State, b: State): State = a
-
+  
+  def stateInit: State = new State { }
 
   def abstractBlock[T](b: Block[T])(st: State): State = b match {
     case Block(stms, e) =>
@@ -288,6 +292,8 @@ class TestFoobarExp extends FileDiffSuite {
     val y = reifyBlock(test(x))
     
     
+    abstractBlock(y)(stateInit)
+    
     
     emitPlain("object FooBar extends (Int => Any) {"/*}*/)
     emitPlain("def apply("+quote(x)+": Int) = ", true)
@@ -297,7 +303,6 @@ class TestFoobarExp extends FileDiffSuite {
   
   def testFoobar1 = {
     withOutFile(prefix+"foobarexp1") {
-     // a write operation must unambigously identify the object being mutated
       trait Prog extends DSL {
         def power(b: Rep[Double], x: Int): Rep[Double] = 
           if (x == 0) 1.0
@@ -313,4 +318,18 @@ class TestFoobarExp extends FileDiffSuite {
     assertFileEqualsCheck(prefix+"foobarexp1")
   }
 
+  def testFoobar2 = {
+    withOutFile(prefix+"foobarexp2") {
+      trait Prog extends DSL {
+        def test(x: Rep[Int]) = {
+          var c = 0
+          while (c < x) {
+            c = c + 1
+          }
+        }
+      }
+      new Prog with Impl
+    }
+    assertFileEqualsCheck(prefix+"foobarexp2")
+  }
 }
