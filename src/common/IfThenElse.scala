@@ -88,7 +88,12 @@ trait IfThenElseExp extends IfThenElse with EffectExp {
 
 }
 
-trait IfThenElseOpt extends IfThenElse with EffectExp { //TODO!
+trait IfThenElseExpOpt extends IfThenElseExp {
+  override def ifThenElse[T:Manifest](cond: Rep[Boolean], thenp: Rep[T], elsep: Rep[T]): Rep[T] = cond match { 
+    case Const(true) => thenp
+    case Const(false) => elsep
+    case _ => super.ifThenElse(cond,thenp,elsep)
+  }
 }
 
 

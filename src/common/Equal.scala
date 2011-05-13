@@ -53,8 +53,14 @@ trait EqualExp extends Equal with BaseExp with VariablesExp {
 }
 
 trait EqualExpOpt extends EqualExp {
-  override def equals[A:Manifest,B:Manifest](a: Rep[A], b: Rep[B]): Rep[Boolean] = if (a == b) Const(true) else super.equals(a,b)
-  override def notequals[A:Manifest,B:Manifest](a: Rep[A], b: Rep[B]): Rep[Boolean] = if (a == b) Const(false) else super.notequals(a,b)
+  override def equals[A:Manifest,B:Manifest](a: Rep[A], b: Rep[B]): Rep[Boolean] = if (a == b) Const(true) else (a,b) match {
+    case (Const(a),Const(b)) => Const(a == b)
+    case _ => super.equals(a,b)
+  }
+  override def notequals[A:Manifest,B:Manifest](a: Rep[A], b: Rep[B]): Rep[Boolean] = if (a == b) Const(false) else (a,b) match {
+    case (Const(a),Const(b)) => Const(a != b)
+    case _ => super.notequals(a,b)
+  }
 }
 
 

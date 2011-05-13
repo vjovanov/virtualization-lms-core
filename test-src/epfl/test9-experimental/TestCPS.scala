@@ -125,6 +125,32 @@ yld((i,j,k))
 }
 
 
+trait AmbProg2 extends AmbProg1 {
+  
+  override def test(x: Rep[Int]): Rep[Unit] = {
+    
+    reset {
+      val a = amb(List(unit(1),unit(2),unit(3),unit(4)))
+      val b = amb(List(unit(1),unit(2),unit(3),unit(4)))
+      val c = amb(List(unit(1),unit(2),unit(3),unit(4)))
+      require(a != b)
+      require(b != c)
+//      require(c != a)
+
+      this.print("found:")
+      this.print(a)
+      this.print(b)
+      this.print(c)
+    }
+    
+    ()
+  }
+  
+  
+}
+
+
+
 
 
 
@@ -155,14 +181,48 @@ class TestCPS extends FileDiffSuite {
     assertFileEqualsCheck(prefix+"cps2")
   }
  
-  def testAmb1 = {
-    withOutFile(prefix+"amb1") {
+  def testAmb1a = {
+    withOutFile(prefix+"amb1a") {
       new AmbProg1 with ArithExp with EqualExp with IfThenElseExp with PrintExp with ScalaCompile { self =>
         val codegen = new ScalaGenArith with ScalaGenEqual with ScalaGenIfThenElse with ScalaGenPrint { val IR: self.type = self }
         //override def compile
         codegen.emitSource(test, "Test", new PrintWriter(System.out))
       }
     }
-    assertFileEqualsCheck(prefix+"amb1")
+    assertFileEqualsCheck(prefix+"amb1a")
   }
+  
+  def testAmb1b = {
+    withOutFile(prefix+"amb1b") {
+      new AmbProg1 with ArithExp with EqualExpOpt with IfThenElseExpOpt with PrintExp with ScalaCompile { self =>
+        val codegen = new ScalaGenArith with ScalaGenEqual with ScalaGenIfThenElse with ScalaGenPrint { val IR: self.type = self }
+        //override def compile
+        codegen.emitSource(test, "Test", new PrintWriter(System.out))
+      }
+    }
+    assertFileEqualsCheck(prefix+"amb1b")
+  }
+
+  def testAmb2a = {
+    withOutFile(prefix+"amb2a") {
+      new AmbProg2 with ArithExp with EqualExp with IfThenElseExp with PrintExp with ScalaCompile { self =>
+        val codegen = new ScalaGenArith with ScalaGenEqual with ScalaGenIfThenElse with ScalaGenPrint { val IR: self.type = self }
+        //override def compile
+        codegen.emitSource(test, "Test", new PrintWriter(System.out))
+      }
+    }
+    assertFileEqualsCheck(prefix+"amb2a")
+  }
+  
+  def testAmb2b = {
+    withOutFile(prefix+"amb2b") {
+      new AmbProg2 with ArithExp with EqualExpOpt with IfThenElseExpOpt with PrintExp with ScalaCompile { self =>
+        val codegen = new ScalaGenArith with ScalaGenEqual with ScalaGenIfThenElse with ScalaGenPrint { val IR: self.type = self }
+        //override def compile
+        codegen.emitSource(test, "Test", new PrintWriter(System.out))
+      }
+    }
+    assertFileEqualsCheck(prefix+"amb2b")
+  }
+
 }
