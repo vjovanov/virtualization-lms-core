@@ -1,6 +1,6 @@
 package scala.virtualization.lms
 package epfl
-package test9
+package test9b
 
 import util.OverloadHack
 
@@ -145,18 +145,32 @@ trait FooBarExp extends Lattices {
   type AvailVal = Set[Sym[Any]]
   val availValLattice: Lattice[AvailVal] = setLattice
 
-  type AbstractValue = (LiveVal,AvailVal,EnvVal)
-  val abstractLattice: Lattice[AbstractValue] = tup3Lattice(liveValLattice, availValLattice, envValLattice)
+  abstract class Target
+  case class Stack(s:Sym[Any]) extends Target { override def toString = "&x"+s.id }
+  case class Heap(s:Sym[Any]) extends Target { override def toString = "malloc"+s.id }
+
+  type HeapVal = Map[Target, Set[Target]]
   
+  implicit val setTarget = setFiniteSet[Target]
+  implicit val mapTargetTarget = mapFiniteMap((k:Target) => Set.empty[Target])
   
-  
-  val Bottom: AbstractValue = (LiveFalse, Set.empty, Map.empty)
+  val heapValLattice: Lattice[HeapVal] = mapLattice(mapTargetTarget, setLattice: Lattice[Set[Target]], setLattice: Lattice[Set[Target]])
   
 /*  
-  case object Bottom extends AbstractValue
-  case object Top extends AbstractValue
-  case class Grr() extends AbstractValue
+  type AbstractValue = (LiveVal,AvailVal,EnvVal)
+  val abstractLattice: Lattice[AbstractValue] = tup3Lattice(liveValLattice, availValLattice, envValLattice)  
+  
+  val Bottom: AbstractValue = (LiveFalse, Set.empty, Map.empty)
 */  
+
+  type AbstractValue = (LiveVal,HeapVal)
+  val abstractLattice: Lattice[AbstractValue] = tup2Lattice(liveValLattice, heapValLattice)  
+
+  val Bottom: AbstractValue = (LiveFalse,Map.empty)
+
+
+
+  
   case class Assignment(val lhs: Sym[_], val rhs: AbstractValue)
   
   var globalSolutions: List[Assignment] = Nil
@@ -175,13 +189,15 @@ trait FooBarExp extends Lattices {
     do {
       prev = globalSolutions
       globalSolutions = (globalSolutions zip globalEquations) map { case (a,e) => 
-        val res = interpret(e.lhs, e.rhs)
+        var res = interpret(e.lhs, e.rhs)
+        // normalize...
+        res = abstractLattice.lub(res, res) // e.g. for Map(a -> Nothing) ==> Map() //TODO
         assert(abstractLattice.lub(a.rhs, res) == res, "not monotonic: " + a.rhs + " ===> " + res)
         Assignment(a.lhs, res)
       }
     } while (prev != globalSolutions)
     
-    // this is bla bla...
+    // this is soup bla bla...
     var sp = soup
     do {
       sp = soup
@@ -294,6 +310,104 @@ trait FooBarExp extends Lattices {
     def unapply(x: Sym[Any]): Option[PPoint] = Some(getsol(x))
   }
   
+
+  def killvar(a: AbstractValue, s: Sym[Any]): AbstractValue = a match {
+    case (z, store) => (z, store.updated(Stack(s), Set.empty))
+  }
+
+  def killvar(a: AbstractValue, s: Target): AbstractValue = a match {
+    case (z, store) => (z, store.updated(s, Set.empty))
+  }
+
+  def allocvar(a: AbstractValue, s: Sym[Any]): AbstractValue = a match {
+    case (z, store) => (z, store.updated(Stack(s), Set(Heap(s))))
+  }
+
+  def getvar(a: AbstractValue, s: Exp[Any]): Set[Target] = a match {
+    case (z, store) => 
+      s match {
+        case s: Sym[Any] => store.getOrElse(Stack(s), Set.empty)
+        case _ => Set.empty
+      }
+  }
+
+  def getvar(a: AbstractValue, s: Target): Set[Target] = a match {
+    case (z, store) => store.getOrElse(s, Set.empty)
+  }
+
+  def setvar(a: AbstractValue, s: Sym[Any], e: Set[Target]): AbstractValue = a match {
+    case (z, store) => (z, store.updated(Stack(s), e))
+  }
+
+  def setvar(a: AbstractValue, s: Target, e: Set[Target]): AbstractValue = a match {
+    case (z, store) => (z, store.updated(s, e))
+  }
+
+
+
+  // TODO: cse, dce
+  /*
+    cse: 
+      initial assumption: all expressions compute same value (1 global partition)
+      when discovering one that doesn't, split partition
+  */
+
+  def interpret(s: Sym[Any], f: Formula): AbstractValue = f match {
+    case StateInit() => (LiveTrue, Map.empty)
+    case StateRef(Sol(a:AbstractValue)) => a
+    case StateOrElse((Sol(a:AbstractValue),u),(Sol(b:AbstractValue),v)) => 
+      abstractLattice.lub(a, b) // ignore result val for now ...
+
+    case StateCheckTrue(Sol(a:AbstractValue),c) => a
+    case StateCheckFalse(Sol(a:AbstractValue),c) => a
+
+    case StatePrim(Sol(a:AbstractValue),VarInit(x)) => 
+      setvar(a,s,getvar(a,x))
+
+    case StatePrim(Sol(a:AbstractValue),VarAssign(v: Sym[Any],x)) => 
+      setvar(a,v,getvar(a,x))
+
+
+    case StatePrim(Sol(a:AbstractValue),PtrNull()) => 
+      killvar(a,s)
+
+    case StatePrim(Sol(a:AbstractValue),PtrAlloc()) => 
+      allocvar(killvar(a,s), s)
+
+    case StatePrim(Sol(a:AbstractValue),PtrDeref(x)) =>  // right(s,x): (s,t) for all (&x,u),(u,t) ∈ σ
+      setvar(a,s,getvar(a,x) flatMap (u => getvar(a,u)))
+
+    case StatePrim(Sol(a:AbstractValue),PtrUpdate(x,y)) => // left(x,y)   *x = y
+      val xderef = getvar(a,x)
+      if (xderef.isEmpty) a
+      else {
+        val yderef = getvar(a,y)        
+        if (yderef.isEmpty) {
+          var a2 = a
+          for (s <- xderef) a2 = killvar(a2,s)
+          a2
+        } else {
+          var a2 = a
+          for (s <- xderef) {
+            a2 = killvar(a2,s)
+            //for (t <- yderef)
+              a2 = setvar(a2, s, yderef)
+          }
+          a2
+        }
+      }
+
+      // σ                                      if {s|(&x,s)∈σ}=∅
+      // ∪{σ↓s|(&x,s)∈σ}                        if {s|(&x,s)∈σ}≠∅ ∧ {t|(&y,t)∈σ}=∅
+      // ∪{σ↓s ∪ {(s,t)}|(&x,s),(&y,t)∈σ}       otherwise
+      
+    case StatePrim(Sol(a:AbstractValue),x) => a
+      
+    case _ => getsol(s) // just return previous value...
+  }
+
+/*
+
 //  def islive(s: Sym[Any]) = 
   
   def getexp(a: AbstractValue, e: Exp[Any]): AbsVal = e match {
@@ -369,7 +483,7 @@ trait FooBarExp extends Lattices {
     case _ => getsol(s) // just return previous value...
   }
   
-  
+*/  
 
   // forward dataflow analyis
   // alternative: effect abstraction. but: hmmm ...
@@ -527,19 +641,30 @@ trait FooBarExp extends Lattices {
   case class Equal[T](a: Exp[T], b: Exp[T]) extends Def[Boolean]
   case class NotEqual[T](a: Exp[T], b: Exp[T]) extends Def[Boolean]
   
-  def equal[T,U](a: Exp[T], b: Exp[U]) = Equal(a,b)
-  def notEqual[T,U](a: Exp[T], b: Exp[U]) = NotEqual(a,b)
+  def equal[T,U](a: Exp[T], b: Exp[U]): Exp[Boolean] = Equal(a,b)
+  def notEqual[T,U](a: Exp[T], b: Exp[U]): Exp[Boolean] = NotEqual(a,b)
   
   case class LessThan[T:Ordering](a: Exp[T], b: Exp[T]) extends Def[Boolean]
   case class LessThanEqual[T:Ordering](a: Exp[T], b: Exp[T]) extends Def[Boolean]
   case class GreaterThan[T:Ordering](a: Exp[T], b: Exp[T]) extends Def[Boolean]
   case class GreaterThanEqual[T:Ordering](a: Exp[T], b: Exp[T]) extends Def[Boolean]
   
-  def lessThan[T:Ordering](a: Exp[T], b: Exp[T]) = LessThan(a,b)
-  def lessThanEqual[T:Ordering](a: Exp[T], b: Exp[T]) = LessThanEqual(a,b)
-  def greaterThan[T:Ordering](a: Exp[T], b: Exp[T]) = GreaterThan(a,b)
-  def greaterThanEqual[T:Ordering](a: Exp[T], b: Exp[T]) = GreaterThanEqual(a,b)
+  def lessThan[T:Ordering](a: Exp[T], b: Exp[T]): Exp[Boolean] = LessThan(a,b)
+  def lessThanEqual[T:Ordering](a: Exp[T], b: Exp[T]): Exp[Boolean] = LessThanEqual(a,b)
+  def greaterThan[T:Ordering](a: Exp[T], b: Exp[T]): Exp[Boolean] = GreaterThan(a,b)
+  def greaterThanEqual[T:Ordering](a: Exp[T], b: Exp[T]): Exp[Boolean] = GreaterThanEqual(a,b)
 
+  trait Ptr[T]
+  
+  case class PtrNull[T]() extends Def[Ptr[T]]
+  case class PtrAlloc[T]() extends Def[Ptr[T]]
+  case class PtrDeref[T](x: Exp[Ptr[T]]) extends Def[T]
+  case class PtrUpdate[T](x: Exp[Ptr[T]], y: Exp[T]) extends Def[Unit]
+  
+  def pointerNull[T:Manifest](): Exp[Ptr[T]] = PtrNull[T]()
+  def pointerAlloc[T:Manifest](): Exp[Ptr[T]] = PtrAlloc[T]()
+  def pointerDeref[T:Manifest](x: Exp[Ptr[T]]): Exp[T] = PtrDeref[T](x)
+  def pointerUpdate[T:Manifest](x: Exp[Ptr[T]], y: Exp[T]): Exp[Unit] = PtrUpdate[T](x, y)
 }
 
 
@@ -732,6 +857,14 @@ trait FooBarLiftExp extends EmbeddedControls with FooBarExp with OverloadHack {
   }
 
 
+  def malloc[T:Manifest]: Rep[Ptr[T]] = pointerAlloc()
+  def NULL[T:Manifest]: Rep[Ptr[T]] = pointerNull()
+  class ptrOps[T:Manifest](x: Rep[Ptr[T]]) {
+    def deref_=(y: Rep[T]): Unit = pointerUpdate(x, y)
+    def deref: Rep[T] = pointerDeref(x)
+  }
+  implicit def ptr_ops[T:Manifest](x: Rep[Ptr[T]]) = new ptrOps[T](x)
+  
   
   def __newVar[T:Manifest](x: T) = varInit(unit(x))
   def __newVar[T](x: Rep[T])(implicit o: Overloaded1, mT: Manifest[T]) = varInit(x)
@@ -770,6 +903,12 @@ class TestFoobarExp extends FileDiffSuite {
     val x = fresh[Int]
     val y = reifyBlock(test(x))
     
+    println("--- code")
+    emitPlain("object FooBar extends (Int => Any) {"/*}*/)
+    emitPlain("def apply("+quote(x)+": Int) = ", true)
+    emitBlock(y)
+    emitPlain(/*{*/"}")
+
     
     val st0 = stateInit
     println("start: " + st0)
@@ -789,11 +928,6 @@ class TestFoobarExp extends FileDiffSuite {
     println("--- soup")
     soup.foreach(println)
     
-    println("--- code")
-    emitPlain("object FooBar extends (Int => Any) {"/*}*/)
-    emitPlain("def apply("+quote(x)+": Int) = ", true)
-    emitBlock(y)
-    emitPlain(/*{*/"}")
   }
   
   def testLattice = {
@@ -820,23 +954,23 @@ class TestFoobarExp extends FileDiffSuite {
   def testFoobar2 = {
     withOutFile(prefix+"foobarexp2") {
       {trait Prog extends DSL {
-        def test(x: Rep[Int]) = {
-          var c = 0
-          while (false) {
-            c = c + 1
+        def test(input: Rep[Int]) = {
+          var n = 0;
+          var x,y,p,q: Rep[Ptr[Any]] = NULL[Any];
+          x = malloc; 
+          y = malloc;
+          x deref_= NULL;
+          y deref_= y;
+          n = input;
+          while (n > 0) {
+            p = malloc; 
+            q = malloc;
+            p deref_= x;
+            q deref_= y;
+            x = p; 
+            y = q;
+            n = n-1;
           }
-        }
-      }
-      new Prog with Impl}
-      {trait Prog extends DSL {
-        def test(x: Rep[Int]) = {
-          var c = 0
-          while (c < x) {
-            c = c + 1
-          }
-          if (c < x)
-            c = 8
-          c
         }
       }
       new Prog with Impl}

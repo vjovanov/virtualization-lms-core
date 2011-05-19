@@ -66,13 +66,13 @@ trait StructExp extends BaseExp with VariablesExp with IfThenElseExp with ArrayL
   override def var_new[T:Manifest](init: Exp[T]): Var[T] = init match {
     case Def(Struct(tag, elems)) => 
       //val r = Variable(struct(tag, elems.mapValues(e=>var_new(e).e))) // DON'T use mapValues!! <--lazy
-      Variable(struct(tag, elems.map(p=>(p._1,var_new(p._2).e))))
+      Variable(struct[Variable[T]](tag, elems.map(p=>(p._1,var_new(p._2).e))))
     case _ => 
       super.var_new(init)
   }
 
   override def var_assign[T:Manifest](lhs: Var[T], rhs: Exp[T]): Exp[Unit] = (lhs,rhs) match {
-    case (Variable(Def(Struct(tagL,elemsL))), Def(Struct(tagR, elemsR))) => 
+    case (Variable(Def(Struct(tagL,elemsL:Map[String,Exp[Variable[Any]]]))), Def(Struct(tagR, elemsR))) => 
       assert(tagL == tagR)
       assert(elemsL.keySet == elemsR.keySet)
       for (k <- elemsL.keySet)
@@ -82,7 +82,7 @@ trait StructExp extends BaseExp with VariablesExp with IfThenElseExp with ArrayL
   }
   
   override def readVar[T:Manifest](v: Var[T]) : Exp[T] = v match {
-    case Variable(Def(Struct(tag, elems))) => 
+    case Variable(Def(Struct(tag, elems: Map[String,Exp[Variable[Any]]]))) => 
       struct[T](tag, elems.map(p=>(p._1,readVar(Variable(p._2)))))
     case _ => super.readVar(v)
   }
