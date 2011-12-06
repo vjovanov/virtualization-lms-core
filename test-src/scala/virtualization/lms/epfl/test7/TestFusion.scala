@@ -36,7 +36,11 @@ trait TransformingStuff extends internal.Transforming with ArrayLoopsExp with Ar
     case ReduceIfElem(c,y) => ReduceIfElem(f(c),f(y))
     case _ => super.mirrorFatDef(e,f)
   }).asInstanceOf[Def[A]]
-    
+  
+  override def mirrorAbstractLoopRange[Iter](l: AbstractLoopRange[Iter], f: Transformer): AbstractLoopRange[Iter] = l match {
+    case IntRange(e) =>	IntRange(f(e)).asInstanceOf[AbstractLoopRange[Iter]] 
+    case _ => super.mirrorAbstractLoopRange(l, f)
+  }
 }
 
 
@@ -49,8 +53,8 @@ trait ScalaGenFatArrayLoopsFusionOpt extends ScalaGenArrayLoopsFat with ScalaGen
     case ArrayIndex(a, i) => Some((a,i))
     case _ => super.unapplySimpleIndex(e)
   }
-  override def unapplySimpleDomain(e: Def[Int]): Option[Exp[Any]] = e match {
-    case ArrayLength(a) => Some(a)
+  override def unapplySimpleDomain(e: AbstractLoopRange[Any]): Option[Exp[Any]] = e match {
+    case IntRange(Def(ArrayLength(a))) => Some(a)
     case _ => super.unapplySimpleDomain(e)
   }
 

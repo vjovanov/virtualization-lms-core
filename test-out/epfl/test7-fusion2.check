@@ -1,3 +1,10 @@
+Current scope:
+    TTP(List(Sym(2)),SimpleFatLoop(IntRange(Const(100)),Sym(1),List(ArrayElem(Const(1.0)))))
+    TTP(List(Sym(5)),SimpleFatLoop(IntRange(Const(100)),Sym(3),List(ArrayElem(Sym(4)))))
+    TTP(List(Sym(10)),SimpleFatLoop(IntRange(Const(100)),Sym(6),List(ArrayElem(Sym(9)))))
+    TTP(List(Sym(13)),SimpleFatLoop(IntRange(Const(100)),Sym(11),List(ReduceElem(Sym(12)))))
+    TTP(List(Sym(18)),SimpleFatLoop(IntRange(Const(100)),Sym(15),List(ReduceElem(Sym(17)))))
+    TTP(List(Sym(22)),SimpleFatLoop(IntRange(Const(100)),Sym(20),List(ReduceElem(Sym(21)))))
 fusion of List((Sym(2),Sym(13))) prevented by TTP(List(Sym(7)),ThinDef(ArrayIndex(Sym(2),Sym(6)))) which is required by body of List(Sym(13))
 fusion of List((Sym(5),Sym(13))) prevented by TTP(List(Sym(8)),ThinDef(ArrayIndex(Sym(5),Sym(6)))) which is required by body of List(Sym(13))
 fusion of List((Sym(2),Sym(18))) prevented by TTP(List(Sym(7)),ThinDef(ArrayIndex(Sym(2),Sym(6)))) which is required by body of List(Sym(18))
@@ -5,22 +12,27 @@ fusion of List((Sym(5),Sym(18))) prevented by TTP(List(Sym(8)),ThinDef(ArrayInde
 fusion of List((Sym(2),Sym(22))) prevented by TTP(List(Sym(7)),ThinDef(ArrayIndex(Sym(2),Sym(6)))) which is required by body of List(Sym(22))
 fusion of List((Sym(5),Sym(22))) prevented by TTP(List(Sym(8)),ThinDef(ArrayIndex(Sym(5),Sym(6)))) which is required by body of List(Sym(22))
 wtableneg: List((Sym(2),Sym(13)), (Sym(5),Sym(13)), (Sym(2),Sym(18)), (Sym(5),Sym(18)), (Sym(2),Sym(22)), (Sym(5),Sym(22)))
-partitions: List(TTP(List(Sym(13), Sym(18), Sym(22)),SimpleFatLoop(Const(100),Sym(11),List(ReduceElem(Sym(12)), ReduceElem(Sym(17)), ReduceElem(Sym(21))))), TTP(List(Sym(2), Sym(5), Sym(10)),SimpleFatLoop(Const(100),Sym(1),List(ArrayElem(Const(1.0)), ArrayElem(Sym(4)), ArrayElem(Sym(9))))))
+partitions: List(TTP(List(Sym(13), Sym(18), Sym(22)),SimpleFatLoop(IntRange(Const(100)),Sym(11),List(ReduceElem(Sym(12)), ReduceElem(Sym(17)), ReduceElem(Sym(21))))), TTP(List(Sym(2), Sym(5), Sym(10)),SimpleFatLoop(IntRange(Const(100)),Sym(1),List(ArrayElem(Const(1.0)), ArrayElem(Sym(4)), ArrayElem(Sym(9))))))
 considering TTP(List(Sym(7)),ThinDef(ArrayIndex(Sym(2),Sym(6))))
-replace TTP(List(Sym(7)),ThinDef(ArrayIndex(Sym(2),Sym(6)))) at 0 within TTP(List(Sym(2), Sym(5), Sym(10)),SimpleFatLoop(Const(100),Sym(1),List(ArrayElem(Const(1.0)), ArrayElem(Sym(4)), ArrayElem(Sym(9)))))
+replace TTP(List(Sym(7)),ThinDef(ArrayIndex(Sym(2),Sym(6)))) at 0 within TTP(List(Sym(2), Sym(5), Sym(10)),SimpleFatLoop(IntRange(Const(100)),Sym(1),List(ArrayElem(Const(1.0)), ArrayElem(Sym(4)), ArrayElem(Sym(9)))))
 considering TTP(List(Sym(8)),ThinDef(ArrayIndex(Sym(5),Sym(6))))
-replace TTP(List(Sym(8)),ThinDef(ArrayIndex(Sym(5),Sym(6)))) at 1 within TTP(List(Sym(2), Sym(5), Sym(10)),SimpleFatLoop(Const(100),Sym(1),List(ArrayElem(Const(1.0)), ArrayElem(Sym(4)), ArrayElem(Sym(9)))))
+replace TTP(List(Sym(8)),ThinDef(ArrayIndex(Sym(5),Sym(6)))) at 1 within TTP(List(Sym(2), Sym(5), Sym(10)),SimpleFatLoop(IntRange(Const(100)),Sym(1),List(ArrayElem(Const(1.0)), ArrayElem(Sym(4)), ArrayElem(Sym(9)))))
 considering TTP(List(Sym(12)),ThinDef(ArrayIndex(Sym(10),Sym(11))))
 considering TTP(List(Sym(16)),ThinDef(ArrayIndex(Sym(10),Sym(15))))
 considering TTP(List(Sym(21)),ThinDef(ArrayIndex(Sym(10),Sym(20))))
 try once more ...
+Current scope:
+    TTP(List(Sym(34), Sym(38)),SimpleFatLoop(IntRange(Const(100)),Sym(11),List(ReduceElem(Sym(33)), ReduceElem(Sym(37)))))
+    TTP(List(Sym(2), Sym(30), Sym(32)),SimpleFatLoop(IntRange(Const(100)),Sym(1),List(ArrayElem(Const(1.0)), ArrayElem(Sym(29)), ArrayElem(Sym(31)))))
 wtableneg: List()
-partitions: List(TTP(List(Sym(34), Sym(38), Sym(2), Sym(30), Sym(32)),SimpleFatLoop(Const(100),Sym(11),List(ReduceElem(Sym(33)), ReduceElem(Sym(37)), ArrayElem(Const(1.0)), ArrayElem(Sym(29)), ArrayElem(Sym(31))))))
+partitions: List(TTP(List(Sym(34), Sym(38), Sym(2), Sym(30), Sym(32)),SimpleFatLoop(IntRange(Const(100)),Sym(11),List(ReduceElem(Sym(33)), ReduceElem(Sym(37)), ArrayElem(Const(1.0)), ArrayElem(Sym(29)), ArrayElem(Sym(31))))))
 considering TTP(List(Sym(33)),ThinDef(ArrayIndex(Sym(32),Sym(11))))
-replace TTP(List(Sym(33)),ThinDef(ArrayIndex(Sym(32),Sym(11)))) at 4 within TTP(List(Sym(34), Sym(38), Sym(2), Sym(30), Sym(32)),SimpleFatLoop(Const(100),Sym(11),List(ReduceElem(Sym(33)), ReduceElem(Sym(37)), ArrayElem(Const(1.0)), ArrayElem(Sym(29)), ArrayElem(Sym(31)))))
+replace TTP(List(Sym(33)),ThinDef(ArrayIndex(Sym(32),Sym(11)))) at 4 within TTP(List(Sym(34), Sym(38), Sym(2), Sym(30), Sym(32)),SimpleFatLoop(IntRange(Const(100)),Sym(11),List(ReduceElem(Sym(33)), ReduceElem(Sym(37)), ArrayElem(Const(1.0)), ArrayElem(Sym(29)), ArrayElem(Sym(31)))))
 try once more ...
+Current scope:
+    TTP(List(Sym(47), Sym(51), Sym(2), Sym(57), Sym(46)),SimpleFatLoop(IntRange(Const(100)),Sym(11),List(ReduceElem(Sym(45)), ReduceElem(Sym(50)), ArrayElem(Const(1.0)), ArrayElem(Sym(44)), ArrayElem(Sym(45)))))
 wtableneg: List()
-partitions: List(TTP(List(Sym(47), Sym(51), Sym(2), Sym(57), Sym(46)),SimpleFatLoop(Const(100),Sym(11),List(ReduceElem(Sym(45)), ReduceElem(Sym(50)), ArrayElem(Const(1.0)), ArrayElem(Sym(44)), ArrayElem(Sym(45))))))
+partitions: List(TTP(List(Sym(47), Sym(51), Sym(2), Sym(57), Sym(46)),SimpleFatLoop(IntRange(Const(100)),Sym(11),List(ReduceElem(Sym(45)), ReduceElem(Sym(50)), ArrayElem(Const(1.0)), ArrayElem(Sym(44)), ArrayElem(Sym(45))))))
 no changes, we're done
 super.focusExactScopeFat with result changed from List(Sym(28)) to List(Sym(56))
 /*****************************************

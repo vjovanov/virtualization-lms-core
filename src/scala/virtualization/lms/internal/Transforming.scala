@@ -4,13 +4,14 @@ package internal
 import scala.collection.mutable.HashMap
 
 trait Transforming extends Expressions {
-  
+    
   abstract class Transformer { // a polymorphic function, basically...
     def apply[A](x: Exp[A]): Exp[A]
     def apply[A](xs: List[Exp[A]]): List[Exp[A]] = xs map (e => apply(e))
     def apply[A](xs: Seq[Exp[A]]): Seq[Exp[A]] = xs map (e => apply(e))
     def apply[X,A](f: X=>Exp[A]): X=>Exp[A] = (z:X) => apply(f(z))
     def apply[X,Y,A](f: (X,Y)=>Exp[A]): (X,Y)=>Exp[A] = (z1:X,z2:Y) => apply(f(z1,z2))
+    def apply[A](x: AbstractLoopRange[A]): AbstractLoopRange[A] = mirrorAbstractLoopRange(x, this)
     //def apply[A](xs: Summary): Summary = xs //TODO
     def onlySyms[A](xs: List[Sym[A]]): List[Sym[A]] = xs map (e => apply(e)) collect { case e: Sym[A] => e }
   }
@@ -27,6 +28,8 @@ trait Transforming extends Expressions {
 
   def mirrorFatDef[A:Manifest](e: Def[A], f: Transformer): Def[A] = sys.error("don't know how to mirror " + e) //hm...
 
+  def mirrorAbstractLoopRange[Iter](x: AbstractLoopRange[Iter], f: Transformer): AbstractLoopRange[Iter] = sys.error("don't know how to mirror: " + x)
+
 
   class SubstTransformer extends Transformer {
     val subst = new HashMap[Exp[Any], Exp[Any]]
@@ -34,7 +37,6 @@ trait Transforming extends Expressions {
     def apply[A](x: Exp[A]): Exp[A] = subst.get(x) match { 
       case Some(y) if y != x => apply(y.asInstanceOf[Exp[A]]) case _ => x 
     }
-
 
 /*    
     def transform[A](s: Sym[A], x: Def[A]): Exp[A] = {

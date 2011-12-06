@@ -70,7 +70,7 @@ trait ArrayLoopsExp extends LoopsExp {
   def infix_at[T:Manifest](a: Rep[Array[T]], i: Rep[Int]): Rep[T] = ArrayIndex(a, i)
 
   def infix_length[T:Manifest](a: Rep[Array[T]]): Rep[Int] = a match {
-    case Def(SimpleLoop(s, x, ArrayElem(y))) => s
+    case Def(SimpleLoop(IntRange(s), x, ArrayElem(y))) => s
     case _ => ArrayLength(a)
   }
 
@@ -94,18 +94,18 @@ trait ScalaGenArrayLoops extends ScalaGenLoops {
   import IR._
   
   override def emitNode(sym: Sym[Any], rhs: Def[Any])(implicit stream: PrintWriter) = rhs match {
-    case SimpleLoop(s,x,ArrayElem(y)) =>  
+    case SimpleLoop(IntRange(s),x,ArrayElem(y)) =>  
       stream.println("val " + quote(sym) + " = LoopArray("+quote(s)+") { " + quote(x) + " => ")
       emitBlock(y)
       stream.println(quote(getBlockResult(y)))
       stream.println("}")
-    case SimpleLoop(s,x,ReduceElem(y)) =>  
+    case SimpleLoop(IntRange(s),x,ReduceElem(y)) =>  
       stream.println("val " + quote(sym) + " = LoopReduce("+quote(s)+") { " + quote(x) + " => ")
       emitBlock(y)
       stream.println(quote(getBlockResult(y)))
       stream.println("}")
     // TODO: conditional variants ...
-    case SimpleLoop(s,x,FlattenElem(y)) =>  
+    case SimpleLoop(IntRange(s),x,FlattenElem(y)) =>  
       stream.println("val " + quote(sym) + " = LoopFlatten("+quote(s)+") { " + quote(x) + " => ")
       emitBlock(y)
       stream.println(quote(getBlockResult(y)))
@@ -123,7 +123,7 @@ trait ScalaGenArrayLoopsFat extends ScalaGenArrayLoops with ScalaGenLoopsFat {
   import IR._
   
   override def emitFatNode(sym: List[Sym[Any]], rhs: FatDef)(implicit stream: PrintWriter) = rhs match {
-    case SimpleFatLoop(s,x,rhs) => 
+    case SimpleFatLoop(IntRange(s),x,rhs) => 
       for ((l,r) <- sym zip rhs) {
         r match {
           case ArrayElem(y) =>

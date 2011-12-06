@@ -12,7 +12,7 @@ trait FatTraversal extends NestedTraversal with FatScheduling {
 
   //  ------------------- these are needed by loop fusion. they should live elsewhere.
   def unapplySimpleIndex(e: Def[Any]): Option[(Exp[Any], Exp[Int])] = None
-  def unapplySimpleDomain(e: Def[Int]): Option[Exp[Any]] = None
+  def unapplySimpleDomain(e: AbstractLoopRange[Any]): Option[Exp[Any]] = None
   def unapplySimpleCollect(e: Def[Any]): Option[Exp[Any]] = None
   def unapplySimpleCollectIf(e: Def[Any]): Option[(Exp[Any],List[Exp[Boolean]])] = unapplySimpleCollect(e).map((_,Nil))
 

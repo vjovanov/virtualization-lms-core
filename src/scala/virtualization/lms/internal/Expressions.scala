@@ -16,17 +16,7 @@ trait Expressions extends Utils {
     def Type : Manifest[T @uncheckedVariance] = manifest[T] //invariant position! but hey...
   }
 
-  // TODO: The fact that we label Consts crashes all the dot tests in the testsuite. In case you need those tests and
-  // don't care about typing MDArrays, simply revert this Const labeling :)
-  case class Const[+T:Manifest](x: T) extends Exp[T] {
-//    var id: Int = {nVars += 1; nVars - 1}
-//    def typeManifest: Manifest[_] = manifest[T]
-//    override def toString = "Const(" + id + ": " + x.toString+ ")"
-//    override def equals(other: Any): Boolean = other match {
-//      case that: Const[_] => that.canEqual(this) && this.x == that.x && this.typeManifest == that.typeManifest && this.id == that.id
-//      case _ => false
-//    }
-  }
+  case class Const[+T:Manifest](x: T) extends Exp[T] 
 
   case class Sym[+T:Manifest](val id: Int) extends Exp[T] {
     var sourceInfo = Thread.currentThread.getStackTrace // until we can get useful info out of the manifest
@@ -37,6 +27,12 @@ trait Expressions extends Utils {
 
   case class Variable[+T](val e: Exp[Variable[T]]) // TODO: decide whether it should stay here ... FIXME: should be invariant
 
+  /** A generic structure that captures the notion of a traversable set of elements that one can loop on 
+   * - don't forget to override the loopRange transformation in Transforming.scala */
+  abstract class AbstractLoopRange[+A: Manifest] {
+    def mf: Manifest[_] = manifest[A]
+  }
+  
   var nVars = 0
   var nTypes = 0
   def fresh[T:Manifest] = Sym[T] { nVars += 1; nVars -1 }

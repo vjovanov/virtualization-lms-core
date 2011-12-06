@@ -117,9 +117,23 @@ trait SimplifyTransform extends internal.FatTraversal {
         innerScope = innerScope ::: missing
       }
       //val shape2 = if (lhs != lhs2) lhs2.map { case Def(SimpleLoop(s,_,_)) => s } reduceLeft { (s1,s2) => assert(s1==s2,"shapes don't agree: "+s1+","+s2); s1 }
-      val shape2 = if (lhs != lhs2) lhs2.map { case Def(l: AbstractLoop[_]) => l.size case Def(Reflect(l: AbstractLoop[_], _, _)) => l.size } reduceLeft { (s1,s2) => assert(s1==s2,"shapes don't agree: "+s1+","+s2); s1 }
-                   else t(s)
-      val rhs2 = if (lhs != lhs2) lhs2.map { s => fatten(findDefinition(s).get) match { case TTP(List(s), SimpleFatLoop(_, _, List(r))) => transformLoopBody(s,r,t) }}
+      val shape2 = if (lhs != lhs2) 
+                      lhs2.map { 
+                        case Def(l: AbstractLoop[_,_]) => l.range 
+                        case Def(Reflect(l: AbstractLoop[_, _], _, _)) => l.range 
+                      } reduceLeft { (s1,s2) => assert(s1==s2,"shapes don't agree: "+s1+","+s2); s1 }
+                   else {
+                	 // we need to make sure the range is transformed into a range and not something else
+                     val newrange = t(s)
+                     assert(newrange.isInstanceOf[AbstractLoopRange[_]])
+                     newrange.asInstanceOf[AbstractLoopRange[Any]]
+                   }
+      val rhs2 = if (lhs != lhs2) 
+                    lhs2.map { 
+                      s => fatten(findDefinition(s).get) match { 
+                        case TTP(List(s), SimpleFatLoop(_, _, List(r))) => transformLoopBody(s,r,t) 
+                      }
+                    }
                  else (lhs zip rhs) map { case (s,r) => transformLoopBody(s,r,t) }
       
       //update innerScope -- change definition of lhs2 in place

@@ -19,7 +19,7 @@ trait LoopFusionOpt extends internal.FatTraversal with SimplifyTransform {
   }
 
   object SimpleDomain {
-    def unapply(a: Def[Int]): Option[Exp[Any]] = unapplySimpleDomain(a)
+    def unapply(a: AbstractLoopRange[Any]): Option[Exp[Any]] = unapplySimpleDomain(a)
   }
 
   object SimpleCollect {
@@ -67,11 +67,11 @@ trait LoopFusionOpt extends internal.FatTraversal with SimplifyTransform {
 
       // keep track of loops in inner scopes
       var UloopSyms = currentScope collect { case e @ TTP(lhs, SimpleFatLoop(_,_,_)) if !Wloops.contains(e) => lhs }
-      
+                  
       do {
         // utils
-        def WgetLoopShape(e: TTP): Exp[Int] = e.rhs match { case SimpleFatLoop(s,x,rhs) => s }
-        def WgetLoopVar(e: TTP): List[Sym[Int]] = e.rhs match { case SimpleFatLoop(s,x,rhs) => List(x) }
+        def WgetLoopShape(e: TTP): AbstractLoopRange[Any] = e.rhs match { case SimpleFatLoop(s,x,rhs) => s }
+        def WgetLoopVar(e: TTP): List[Sym[Any]] = e.rhs match { case SimpleFatLoop(s,x,rhs) => List(x) }
         def WgetLoopRes(e: TTP): List[Def[Any]] = e.rhs match { case SimpleFatLoop(s,x,rhs) => rhs }
 
         val loopCollectSyms = Wloops flatMap (e => (e.lhs zip WgetLoopRes(e)) collect { case (s, SimpleCollectIf(_,_)) => s })
@@ -82,6 +82,12 @@ trait LoopFusionOpt extends internal.FatTraversal with SimplifyTransform {
         val WloopSyms = Wloops map (_.lhs)
         val WloopVars = Wloops map WgetLoopVar
 
+        
+        printlog("Current scope:")
+        for (Wloop <- Wloops)
+          printlog("    " + Wloop)
+        
+        
         // find negative dependencies (those that block fusion)
         
         // might be costly: resolve and traverse complete input deps for each loop body
@@ -89,7 +95,7 @@ trait LoopFusionOpt extends internal.FatTraversal with SimplifyTransform {
 
         // possible extension: have WtableNeg keep track of the statements that prevent fusion
         // then we can later remove the entry and see if the dependency goes away...
-        
+                    
         val WtableNeg = Wloops.flatMap { dx => // find non-simple dependencies (other than a(i))
           val thisLoopVars = WgetLoopVar(dx)
           val otherLoopSyms = loopSyms diff (dx.lhs)
@@ -115,19 +121,19 @@ trait LoopFusionOpt extends internal.FatTraversal with SimplifyTransform {
         
         def canFuseDirect(a: TTP, b: TTP): Boolean = (a.rhs,b.rhs) match {
           case (SimpleFatLoop(s1,_,_), SimpleFatLoop(s2,_,_)) if s1 == s2 => true  // same size (horizontal or pipeline)
-          case (SimpleFatLoop(Def(SimpleDomain(a1)),_,_), SimpleFatLoop(_,_,_)) if b.lhs contains a1 => true // pipeline
-          case (SimpleFatLoop(_,_,_), SimpleFatLoop(Def(SimpleDomain(b1)),_,_)) if a.lhs contains b1 => true
+          case (SimpleFatLoop(SimpleDomain(a1),_,_), SimpleFatLoop(_,_,_)) if b.lhs contains a1 => true // pipeline
+          case (SimpleFatLoop(_,_,_), SimpleFatLoop(SimpleDomain(b1),_,_)) if a.lhs contains b1 => true
           case _ => false
         }
         
-        def canFuse(a: TTP, b: TTP): Boolean = canFuseDirect(a,b) && canFuseIndirect(a,b)        
+        def canFuse(a: TTP, b: TTP): Boolean = canFuseDirect(a,b) && canFuseIndirect(a,b) 
         
         // shape dependency helpers
         
-        def isShapeDep(s: Exp[Int], a: TTP) = s match { case Def(SimpleDomain(a1)) => a.lhs contains a1 case _ => false }
-        def getShapeCond(s: Exp[Int], a: TTP) = s match { case Def(SimpleDomain(a1)) => WgetLoopRes(a)(a.lhs indexOf a1) match { case SimpleCollectIf(a,c) => c } }
+        def isShapeDep(s: AbstractLoopRange[_], a: TTP) = s match { case SimpleDomain(a1) => a.lhs contains a1 case _ => false }
+        def getShapeCond(s: AbstractLoopRange[_], a: TTP) = s match { case SimpleDomain(a1) => WgetLoopRes(a)(a.lhs indexOf a1) match { case SimpleCollectIf(a,c) => c } }
         
-        def extendLoopWithCondition(e: TTP, shape: Exp[Int], targetVar: Sym[Int], c: List[Exp[Boolean]]): List[Exp[Any]] = e.rhs match { 
+        def extendLoopWithCondition[A](e: TTP, shape: AbstractLoopRange[A], targetVar: Sym[A], c: List[Exp[Boolean]]): List[Exp[Any]] = e.rhs match { 
           case SimpleFatLoop(s,x,rhs) => rhs.map { r => findOrCreateDefinition(SimpleLoop(shape,targetVar,applyAddCondition(r,c))).sym }
         }
         
