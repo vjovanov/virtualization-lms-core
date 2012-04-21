@@ -10,13 +10,15 @@ resolvers += dropboxScalaTestRepo
 
 scalaVersion := virtScala
 
-scalaBinaryVersion := virtScala // necessary??
+//scalaBinaryVersion := virtScala // necessary??
 
 scalaSource in Compile <<= baseDirectory(_ / "src")
 
 scalaSource in Test <<= baseDirectory(_ / "test-src")
 
-scalacOptions += "-Yvirtualize" 
+scalacOptions += "-Yvirtualize"
+
+//scalacOptions += "-Yvirtpatmat"
 
 //scalacOptions in Compile ++= Seq(/*Unchecked, */Deprecation)
 

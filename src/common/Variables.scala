@@ -2,6 +2,7 @@ package scala.virtualization.lms
 package common
 
 import java.io.PrintWriter
+import scala.reflect.SourceContext
 import scala.virtualization.lms.util.OverloadHack
 
 trait LiftVariables extends Base {
@@ -77,6 +78,7 @@ trait VariablesExp extends Variables with ImplicitOpsExp with VariableImplicits 
   // then the existing implicit from Rep to Ops will be used, and the ReadVar operation will be lost.
   // Defining Vars as separate from Exps will always cause a compile-time error if the implicit is missing.
 
+  //case class Variable[+T](val e: Exp[Variable[T]]) // FIXME: in Expressions because used by codegen...
   type Var[+T] = Variable[T] //FIXME: should be invariant
 
   case class ReadVar[T:Manifest](v: Var[T]) extends Def[T]
@@ -143,7 +145,7 @@ trait VariablesExp extends Variables with ImplicitOpsExp with VariableImplicits 
 
 
 
-  override def mirror[A:Manifest](e: Def[A], f: Transformer): Exp[A] = (e match {
+  override def mirror[A:Manifest](e: Def[A], f: Transformer)(implicit pos: SourceContext): Exp[A] = (e match {
     case Reflect(NewVar(a), u, es) => reflectMirrored(Reflect(NewVar(f(a)), mapOver(f,u), f(es)))(mtype(manifest[A]))
     case Reflect(ReadVar(Variable(a)), u, es) => reflectMirrored(Reflect(ReadVar(Variable(f(a))), mapOver(f,u), f(es)))(mtype(manifest[A]))
     case Reflect(Assign(Variable(a),b), u, es) => reflectMirrored(Reflect(Assign(Variable(f(a)), f(b)), mapOver(f,u), f(es)))(mtype(manifest[A]))
@@ -162,6 +164,8 @@ trait VariablesExpOpt extends VariablesExp {
       // find the last modification of variable v
       // if it is an assigment, just return the last value assigned 
       val vs = v.e.asInstanceOf[Sym[Variable[T]]]
+      //TODO: could use calculateDependencies(Read(v))
+      
       val rhs = context.reverse.collectFirst { 
         case w @ Def(Reflect(NewVar(rhs: Exp[T]), _, _)) if w == vs => Some(rhs)
         case Def(Reflect(Assign(`v`, rhs: Exp[T]), _, _)) => Some(rhs)
@@ -182,7 +186,7 @@ trait ScalaGenVariables extends ScalaGenEffect {
   val IR: VariablesExp
   import IR._
 
-  override def emitNode(sym: Sym[Any], rhs: Def[Any])(implicit stream: PrintWriter) = rhs match {
+  override def emitNode(sym: Sym[Any], rhs: Def[Any]) = rhs match {
     case ReadVar(Variable(a)) => emitValDef(sym, quote(a))
     case NewVar(init) => emitVarDef(sym.asInstanceOf[Sym[Variable[Any]]], quote(init))
     case Assign(Variable(a), b) => emitAssignment(quote(a), quote(b))
@@ -197,7 +201,7 @@ trait CLikeGenVariables extends CLikeGenBase {
   val IR: VariablesExp
   import IR._
 
-  override def emitNode(sym: Sym[Any], rhs: Def[Any])(implicit stream: PrintWriter) = {
+  override def emitNode(sym: Sym[Any], rhs: Def[Any]) = {
       rhs match {
         case ReadVar(Variable(a)) =>
           emitValDef(sym, quote(a))

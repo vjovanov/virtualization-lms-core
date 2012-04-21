@@ -23,14 +23,16 @@ trait OpenCLCodegen extends GPUCodegen {
 
     val currentTab = tabWidth
     tabWidth = 1
-    emitBlock(func)(tempStream)
+    withStream(tempStream) {
+      emitBlock(func)
+    }
     tabWidth = currentTab
 
     val inputs = (getFreeVarBlock(func,Nil).filterNot(ele => locals.contains(ele))++getKernelTemps).distinct
-    val paramStr = (locals++inputs).map(ele=>remap(ele.Type)+" "+quote(ele)).mkString(",")
-    header.append("%s dev_%s(%s) {\n".format(remap(getBlockResult(func).Type),currIdx,paramStr))
+    val paramStr = (locals++inputs).map(ele=>remap(ele.tp)+" "+quote(ele)).mkString(",")
+    header.append("%s dev_%s(%s) {\n".format(remap(getBlockResult(func).tp),currIdx,paramStr))
     //header.append("\tint idxX = get_global_id(0);\n")
-    if(remap(getBlockResult(func).Type) != "void")
+    if(remap(getBlockResult(func).tp) != "void")
       footer.append("\treturn %s;\n".format(quote(getBlockResult(func))))
     footer.append("}\n")
     devFuncString.append(header)
@@ -113,10 +115,10 @@ trait OpenCLCodegen extends GPUCodegen {
     tabWidth = currentTab
 
     val inputs = (getFreeVarBlock(func,Nil).filterNot(ele => locals.contains(ele))++gpuTemps).distinct
-    val paramStr = (locals++inputs).map(ele=>remap(ele.Type)+" "+quote(ele)).mkString(",")
-    header.append("%s dev_%s(%s) {\n".format(remap(func.Type),currIdx,paramStr))
+    val paramStr = (locals++inputs).map(ele=>remap(ele.tp)+" "+quote(ele)).mkString(",")
+    header.append("%s dev_%s(%s) {\n".format(remap(func.tp),currIdx,paramStr))
     //header.append("\tint idxX = get_global_id(0);\n")
-    if(remap(func.Type) != "void")
+    if(remap(func.tp) != "void")
       footer.append("\treturn %s;\n".format(quote(getBlockResult(func))))
     footer.append("}\n")
     devFuncString.append(header)
@@ -208,7 +210,7 @@ trait OpenCLCodegen extends GPUCodegen {
 
     // Conditions for not generating OpenCL kernels (may be relaxed later)
     for(sym <- syms) {
-      if((isPrimitiveType(sym.Type)) && (remap(sym.Type)!="void")) throw new GenerationFailedException("OpenCLGen: Not GPUable")
+      if((isPrimitiveType(sym.tp)) && (remap(sym.tp)!="void")) throw new GenerationFailedException("OpenCLGen: Not GPUable")
     }
     if((vars.length > 0)  || (resultIsVar)) throw new GenerationFailedException("OpenCLGen: Not GPUable")
 
@@ -220,7 +222,7 @@ trait OpenCLCodegen extends GPUCodegen {
     currDim = 0
     xDimList.clear
     yDimList.clear
-	  multDimInputs.clear
+    multDimInputs.clear
 
     helperFuncString.clear
     MetaData.init
@@ -321,51 +323,51 @@ trait OpenCLCodegen extends GPUCodegen {
     }
   }
 
-  override def unpackObject[A](sym: Sym[Any]) : Map[String,Manifest[_]] = remap(sym.Type) match {
+  override def unpackObject[A](sym: Sym[Any]) : Map[String,Manifest[_]] = remap(sym.tp) match {
     case "OpenCLIntList" => Map("length"->Manifest.Int)    //TODO: How to initialize the data array type for the list?
-    case _ => throw new GenerationFailedException("OpenCLGen: Type %s cannot be unpacked.".format(sym.Type.toString))
+    case _ => throw new GenerationFailedException("OpenCLGen: Type %s cannot be unpacked.".format(sym.tp.toString))
   }
 
   // TODO: Handle general C datastructure
   def copyInputHtoD(sym: Sym[Any]) : String = {
-    checkGPUableType(sym.Type)
-    remap(sym.Type) match {
+    checkGPUableType(sym.tp)
+    remap(sym.tp) match {
       case "OpenCLIntList" => {
         val out = new StringBuilder
-        out.append("\t%s *%s = new %s();\n".format(remap(sym.Type),quote(sym),remap(sym.Type)))
+        out.append("\t%s *%s = new %s();\n".format(remap(sym.tp),quote(sym),remap(sym.tp)))
         out.append("\treturn %s;\n".format(quote(sym)))
         out.toString
       }
-      case _ => throw new Exception("OpenCLGen: copyInputHtoD(sym) : Cannot copy to GPU device (%s)".format(remap(sym.Type)))
+      case _ => throw new Exception("OpenCLGen: copyInputHtoD(sym) : Cannot copy to GPU device (%s)".format(remap(sym.tp)))
     }
   }
 
   def copyOutputDtoH(sym: Sym[Any]) : String = {
-    checkGPUableType(sym.Type)
-    remap(sym.Type) match {
+    checkGPUableType(sym.tp)
+    remap(sym.tp) match {
       case "OpenCLIntList" => "\t//TODO: Implement this!\n"
-      case _ => throw new Exception("OpenCLGen: copyOutputDtoH(sym) : Cannot copy from GPU device (%s)".format(remap(sym.Type)))
+      case _ => throw new Exception("OpenCLGen: copyOutputDtoH(sym) : Cannot copy from GPU device (%s)".format(remap(sym.tp)))
     }
   }
 
   def copyMutableInputDtoH(sym: Sym[Any]) : String = {
-    checkGPUableType(sym.Type)
-    remap(sym.Type) match {
+    checkGPUableType(sym.tp)
+    remap(sym.tp) match {
       case "OpenCLIntList" => "\t//TODO: Implement this!\n"
-      case _ => throw new Exception("OpenCLGen: copyMutableInputDtoH(sym) : Cannot copy from GPU device (%s)".format(remap(sym.Type)))
+      case _ => throw new Exception("OpenCLGen: copyMutableInputDtoH(sym) : Cannot copy from GPU device (%s)".format(remap(sym.tp)))
     }
   }
 
   //TODO: Remove below methods
   def allocOutput(newSym: Sym[_], sym: Sym[_], reset: Boolean = false) : Unit = {
-    throw new GenerationFailedException("OpenCLGen: allocOutput(newSym, sym) : Cannot allocate GPU memory (%s)".format(remap(sym.Type)))
+    throw new GenerationFailedException("OpenCLGen: allocOutput(newSym, sym) : Cannot allocate GPU memory (%s)".format(remap(sym.tp)))
   }
   def allocReference(newSym: Sym[Any], sym: Sym[Any]) : Unit = {
-    throw new GenerationFailedException("OpenCLGen: allocReference(newSym, sym) : Cannot allocate GPU memory (%s)".format(remap(sym.Type)))
+    throw new GenerationFailedException("OpenCLGen: allocReference(newSym, sym) : Cannot allocate GPU memory (%s)".format(remap(sym.tp)))
   }
 
   def positionMultDimInputs(sym: Sym[Any]) : String = {
-    throw new GenerationFailedException("OpenCLGen: positionMultDimInputs(sym) : Cannot reposition GPU memory (%s)".format(remap(sym.Type)))
+    throw new GenerationFailedException("OpenCLGen: positionMultDimInputs(sym) : Cannot reposition GPU memory (%s)".format(remap(sym.tp)))
 
   }
 
@@ -373,47 +375,47 @@ trait OpenCLCodegen extends GPUCodegen {
     throw new GenerationFailedException("OpenCLGen: cloneObject(sym)")
   }
 
-  def emitSource[A,B](f: Exp[A] => Exp[B], className: String, stream: PrintWriter)(implicit mA: Manifest[A], mB: Manifest[B]): List[(Sym[Any], Any)] = {
+  def emitSource[A,B](f: Exp[A] => Exp[B], className: String, out: PrintWriter)(implicit mA: Manifest[A], mB: Manifest[B]): List[(Sym[Any], Any)] = {
     val x = fresh[A]
     val y = reifyBlock(f(x))
 
     val sA = mA.toString
     val sB = mB.toString
 
-    stream.println("/*****************************************\n"+
-                   "  Emitting OpenCL Generated Code                  \n"+
-                   "*******************************************/\n" +
-                   "#include <stdio.h>\n" +
-                   "#include <stdlib.h>"
-    )
+    withStream(out) {
+      stream.println("/*****************************************\n"+
+                     "  Emitting OpenCL Generated Code                  \n"+
+                     "*******************************************/\n" +
+                     "#include <stdio.h>\n" +
+                     "#include <stdlib.h>"
+      )
 
-    stream.println("int main(int argc, char** argv) {")
+      stream.println("int main(int argc, char** argv) {")
 
-    emitBlock(y)(stream)
-    //stream.println(quote(getBlockResult(y)))
+      emitBlock(y)
+      //stream.println(quote(getBlockResult(y)))
 
-    stream.println("}")
-    stream.println("/*****************************************\n"+
-                   "  End of OpenCL Generated Code                  \n"+
-                   "*******************************************/")
-
-    stream.flush
+      stream.println("}")
+      stream.println("/*****************************************\n"+
+                     "  End of OpenCL Generated Code                  \n"+
+                     "*******************************************/")
+      }
     Nil
   }
 
-  def emitValDef(sym: Sym[Any], rhs: String)(implicit stream: PrintWriter): Unit = {
-    stream.println(addTab() + remap(sym.Type) + " " + quote(sym) + " = " + rhs + ";")
+  def emitValDef(sym: Sym[Any], rhs: String): Unit = {
+    stream.println(addTab() + remap(sym.tp) + " " + quote(sym) + " = " + rhs + ";")
   }
 
-  def emitVarDef(sym: Sym[Variable[Any]], rhs: String)(implicit stream: PrintWriter): Unit = {
-    stream.println(addTab()+ remap(sym.Type) + " " + quote(sym) + " = " + rhs + ";")
+  def emitVarDef(sym: Sym[Variable[Any]], rhs: String): Unit = {
+    stream.println(addTab()+ remap(sym.tp) + " " + quote(sym) + " = " + rhs + ";")
   }
 
-  def emitAssignment(lhs:String, rhs: String)(implicit stream: PrintWriter): Unit = {
+  def emitAssignment(lhs:String, rhs: String): Unit = {
     stream.println(addTab() + " " + lhs + " = " + rhs + ";")
   }
 
-  override def emitKernelHeader(syms: List[Sym[Any]], vals: List[Sym[Any]], vars: List[Sym[Any]], resultType: String, resultIsVar: Boolean, external: Boolean)(implicit stream: PrintWriter): Unit = {
+  override def emitKernelHeader(syms: List[Sym[Any]], vals: List[Sym[Any]], vars: List[Sym[Any]], resultType: String, resultIsVar: Boolean, external: Boolean): Unit = {
     if (external) {
       // CUDA library ops use a C wrapper, so should be generated as a C kernel
       assert(syms.length == 1)
@@ -427,9 +429,9 @@ trait OpenCLCodegen extends GPUCodegen {
     val out = new StringBuilder
     //out.append(getDSLHeaders)
 
-    val paramStr = (getKernelOutputs++getKernelInputs++getKernelTemps).filterNot(e=>isVoidType(e.Type)).map(ele =>
-      if(isPrimitiveType(ele.Type))
-        remap(ele.Type) + " " + quote(ele)
+    val paramStr = (getKernelOutputs++getKernelInputs++getKernelTemps).filterNot(e=>isVoidType(e.tp)).map(ele =>
+      if(isPrimitiveType(ele.tp))
+        remap(ele.tp) + " " + quote(ele)
       else
         unpackObject(ele).map(e => remap(e._2) + " " + quote(ele) + "_" + e._1).mkString(",")
     ).mkString(", ")
@@ -437,8 +439,8 @@ trait OpenCLCodegen extends GPUCodegen {
     //TODO: Kernel parameters needs to be unrolled
     out.append("__kernel void kernel_%s(%s) {\n".format(syms.map(quote(_)).mkString(""),paramStr))
     out.append(addTab()+"int idxX = get_global_id(0);\n")
-    val reAssembleString = (getKernelOutputs++getKernelInputs++getKernelTemps).filter(e=>isObjectType(e.Type)).map( ele =>
-      remap(ele.Type) + " " + quote(ele) + ";" +
+    val reAssembleString = (getKernelOutputs++getKernelInputs++getKernelTemps).filter(e=>isObjectType(e.tp)).map( ele =>
+      remap(ele.tp) + " " + quote(ele) + ";" +
       unpackObject(ele).map(e => quote(ele) + "." + e._1 + " = " + quote(ele) + "_" + e._1).mkString(";")
     ).mkString(";\n") + ";\n"
 
@@ -451,7 +453,7 @@ trait OpenCLCodegen extends GPUCodegen {
     stream.print(out.toString)
   }
 
-  override def emitKernelFooter(syms: List[Sym[Any]], vals: List[Sym[Any]], vars: List[Sym[Any]], resultType: String, resultIsVar: Boolean, external: Boolean)(implicit stream: PrintWriter): Unit = {
+  override def emitKernelFooter(syms: List[Sym[Any]], vals: List[Sym[Any]], vars: List[Sym[Any]], resultType: String, resultIsVar: Boolean, external: Boolean): Unit = {
     if (external) {
       super.emitKernelFooter(syms, vals, vars, resultType, resultIsVar, external)
       //return
@@ -462,18 +464,18 @@ trait OpenCLCodegen extends GPUCodegen {
 
     tabWidth -= 1
       
-	  //if(MetaData.gpuOutput == "") { throw new GenerationFailedException("OpenCLGen:No output for GPU")}
+    //if(MetaData.gpuOutput == "") { throw new GenerationFailedException("OpenCLGen:No output for GPU")}
 
     // Emit input copy helper functions for object type inputs
-    for(v <- vals if isObjectType(v.Type)) {
+    for(v <- vals if isObjectType(v.tp)) {
       helperFuncString.append(emitCopyInputHtoD(v, syms, copyInputHtoD(v)))
       helperFuncString.append(emitCopyMutableInputDtoH(v, syms, copyMutableInputDtoH(v)))
     }
     /*
     // Emit input copy helper functions for object type inputs
     for(v <- vals) {
-      if(isObjectType(v.Type)) {
-        MetaData.gpuInputs.add("{\"%s\":[\"%s\",\"copyInputHtoD_%s\",\"copyMutableInputDtoH_%s\"]}".format(quote(v),remap(v.Type),remap(v.Type),remap(v.Type)))
+      if(isObjectType(v.tp)) {
+        MetaData.gpuInputs.add("{\"%s\":[\"%s\",\"copyInputHtoD_%s\",\"copyMutableInputDtoH_%s\"]}".format(quote(v),remap(v.tp),remap(v.tp),remap(v.tp)))
       }
     }
     */
@@ -502,13 +504,13 @@ trait OpenCLCodegen extends GPUCodegen {
   // For object type inputs, allocate GPU memory and copy from CPU to GPU.
   def emitCopyInputHtoD(sym: Sym[Any], ksyms: List[Sym[Any]], contents: String) : String = {
     val out = new StringBuilder
-    if(isObjectType(sym.Type)) {
-	    helperFuncIdx += 1
-      out.append("%s *copyInputHtoD_%s_%s_%s(%s) {\n".format(remap(sym.Type), ksyms.map(quote(_)).mkString(""), quote(sym),helperFuncIdx, "JNIEnv *env , jobject obj"))
+    if(isObjectType(sym.tp)) {
+      helperFuncIdx += 1
+      out.append("%s *copyInputHtoD_%s_%s_%s(%s) {\n".format(remap(sym.tp), ksyms.map(quote(_)).mkString(""), quote(sym),helperFuncIdx, "JNIEnv *env , jobject obj"))
       //out.append(copyInputHtoD(sym))
       out.append(contents)
       out.append("}\n")
-      MetaData.gpuInputs.add("{\"%s\":[\"%s\",\"copyInputHtoD_%s_%s_%s\"".format(quote(sym),remap(sym.Type),ksyms.map(quote(_)).mkString(""),quote(sym),helperFuncIdx))
+      MetaData.gpuInputs.add("{\"%s\":[\"%s\",\"copyInputHtoD_%s_%s_%s\"".format(quote(sym),remap(sym.tp),ksyms.map(quote(_)).mkString(""),quote(sym),helperFuncIdx))
       out.toString
     }
     else ""
@@ -517,10 +519,10 @@ trait OpenCLCodegen extends GPUCodegen {
   // For mutable inputs, copy the mutated datastructure from GPU to CPU after the kernel is terminated
   def emitCopyMutableInputDtoH(sym: Sym[Any], ksyms: List[Sym[Any]], contents: String): String = {
     val out = new StringBuilder
-    if(isObjectType(sym.Type)) {
-	  helperFuncIdx += 1
-      out.append("void copyMutableInputDtoH_%s_%s_%s(%s) {\n".format(ksyms.map(quote(_)).mkString(""), quote(sym), helperFuncIdx, "JNIEnv *env , jobject obj, "+remap(sym.Type)+" *"+quote(sym)+"_ptr"))
-      out.append("%s %s = *(%s_ptr);\n".format(remap(sym.Type),quote(sym),quote(sym)))
+    if(isObjectType(sym.tp)) {
+    helperFuncIdx += 1
+      out.append("void copyMutableInputDtoH_%s_%s_%s(%s) {\n".format(ksyms.map(quote(_)).mkString(""), quote(sym), helperFuncIdx, "JNIEnv *env , jobject obj, "+remap(sym.tp)+" *"+quote(sym)+"_ptr"))
+      out.append("%s %s = *(%s_ptr);\n".format(remap(sym.tp),quote(sym),quote(sym)))
       //out.append(copyMutableInputDtoH(sym))
       out.append(contents)
       out.append("}\n")
@@ -531,43 +533,43 @@ trait OpenCLCodegen extends GPUCodegen {
   }
 
   def emitAllocOutput(sym: Sym[Any], contents: String, args: List[Sym[Any]]): String = {
-	  val out = new StringBuilder
-	  if(isObjectType(sym.Type)) {
-	  	helperFuncIdx += 1
-		val argStr = args.map("\""+quote(_)+"\"").mkString(",")
-		val paramStr = args.map(ele =>
-		  if(isObjectType(ele.Type)) remap(ele.Type) + " *" + quote(ele) + "_ptr"
-		  else remap(ele.Type) + " " + quote(ele)
-		).mkString(",")
+    val out = new StringBuilder
+    if(isObjectType(sym.tp)) {
+      helperFuncIdx += 1
+    val argStr = args.map("\""+quote(_)+"\"").mkString(",")
+    val paramStr = args.map(ele =>
+      if(isObjectType(ele.tp)) remap(ele.tp) + " *" + quote(ele) + "_ptr"
+      else remap(ele.tp) + " " + quote(ele)
+    ).mkString(",")
     val derefParams = args.map(ele=>
-   	  if(isObjectType(ele.Type)) "\t%s %s = *(%s_ptr);\n".format(remap(ele.Type),quote(ele),quote(ele))
+      if(isObjectType(ele.tp)) "\t%s %s = *(%s_ptr);\n".format(remap(ele.tp),quote(ele),quote(ele))
       else ""
     ).mkString("")
 
-    MetaData.gpuOutput.add("{\"%s\":[\"%s\",\"allocFunc_%s\",[%s],".format(quote(sym),remap(sym.Type),helperFuncIdx,argStr))
-    out.append("%s *allocFunc_%s(%s) {\n".format(remap(sym.Type), helperFuncIdx, paramStr))
-		out.append(derefParams+"\n")
+    MetaData.gpuOutput.add("{\"%s\":[\"%s\",\"allocFunc_%s\",[%s],".format(quote(sym),remap(sym.tp),helperFuncIdx,argStr))
+    out.append("%s *allocFunc_%s(%s) {\n".format(remap(sym.tp), helperFuncIdx, paramStr))
+    out.append(derefParams+"\n")
     out.append(contents)
     out.append("}\n")
     out.toString
-	  }
-	  else ""
+    }
+    else ""
   }
 
   def emitCopyOutputDtoH(sym: Sym[Any], ksym: Sym[Any], contents: String): String = {
-	  val out = new StringBuilder
-	  if(isObjectType(sym.Type)) {
-	  	helperFuncIdx += 1
+    val out = new StringBuilder
+    if(isObjectType(sym.tp)) {
+      helperFuncIdx += 1
       val str = MetaData.gpuOutput.get(MetaData.gpuOutput.size-1)
       MetaData.gpuOutput.remove(MetaData.gpuOutput.size-1)
       MetaData.gpuOutput.add(str+"\"copyOutputDtoH_%s\",{%s}]}".format(helperFuncIdx,unpackObject(sym).map(f => "\"%s\":\"%s\"".format(f._1,remap(f._2)).replaceAll("__global ","")).mkString(",")))
-      out.append("jobject copyOutputDtoH_%s(JNIEnv *env,%s) {\n".format(helperFuncIdx,remap(sym.Type)+" *"+quote(sym)+"_ptr"))
-		  out.append("\t%s %s = *(%s_ptr);\n".format(remap(sym.Type),quote(sym),quote(sym)))
+      out.append("jobject copyOutputDtoH_%s(JNIEnv *env,%s) {\n".format(helperFuncIdx,remap(sym.tp)+" *"+quote(sym)+"_ptr"))
+      out.append("\t%s %s = *(%s_ptr);\n".format(remap(sym.tp),quote(sym),quote(sym)))
       out.append(contents)
       out.append("}\n")
       out.toString
-	  }
-	  else ""
+    }
+    else ""
   }
 
   /* emitAllocFunc method emits code for allocating the output memory of a kernel,
@@ -585,48 +587,48 @@ trait OpenCLCodegen extends GPUCodegen {
     // Get free variables
     val inputs = getFreeVarBlock(allocFunc,Nil)
     //val paramStr = inputs.map(ele=>
-	//		if(isObjectType(ele.Type)) remap(ele.Type) + " *_" + quote(ele)
-	//		else remap(ele.Type) + " " + quote(ele)
-	//  ).mkString(",")
+  //    if(isObjectType(ele.tp)) remap(ele.tp) + " *_" + quote(ele)
+  //    else remap(ele.tp) + " " + quote(ele)
+  //  ).mkString(",")
 
     /* Object type inputs of helper functions are pointers, but OpenCL generators assume the actual objects,
            therefore need to dereference the objects before emitting the actual block contents. */
     //val derefParams = inputs.map(ele=>
-    //  if(isObjectType(ele.Type)) "\t%s %s = *_%s;\n".format(remap(ele.Type),quote(ele),quote(ele))
+    //  if(isObjectType(ele.tp)) "\t%s %s = *_%s;\n".format(remap(ele.tp),quote(ele),quote(ele))
     //  else ""
     //).mkString("")
 
     // Generate allocation helper function
-    //tempString.append("%s *allocFunc_%s(%s) {\n".format(remap(allocFunc.Type),currHelperFuncIdx,paramStr))
+    //tempString.append("%s *allocFunc_%s(%s) {\n".format(remap(allocFunc.tp),currHelperFuncIdx,paramStr))
     //tempString.append(derefParams)
     //emitBlock(allocFunc)(tempStream)
     //tempString.append("\treturn %s;\n".format(quote(getBlockResult(allocFunc))))
     //tempString.append("}\n")
 
     // Generate allocation helper function
-	//tempString.append(derefParams)
+  //tempString.append(derefParams)
     emitBlock(allocFunc)(tempStream)
     tempString.append("\treturn %s_ptr;\n".format(quote(getBlockResult(allocFunc))))
     val allocOutputStr = emitAllocOutput(sym, tempString.toString, inputs)
 
     // Generate copy (D->H) helper function
-    //tempString.append("jobject copyOutputDtoH_%s(JNIEnv *env,%s) {\n".format(helperFuncIdx,remap(sym.Type)+" *"+quote(sym)))
+    //tempString.append("jobject copyOutputDtoH_%s(JNIEnv *env,%s) {\n".format(helperFuncIdx,remap(sym.tp)+" *"+quote(sym)))
     //tempString.append(copyOutputDtoH(sym))
     //tempString.append("}\n")
 
     // Generate copy (D->H) helper function
     tempString2.append(copyOutputDtoH(sym))
-	val copyOutputStr = emitCopyOutputDtoH(sym, null, tempString2.toString)
+  val copyOutputStr = emitCopyOutputDtoH(sym, null, tempString2.toString)
 
     // Register Metadata
     //TODO: How can I get rid of __global from the result of remap??
-    //MetaData.gpuOutput = "{\"%s\":[\"%s\",\"allocFunc_%s\",[%s],\"copyOutputDtoH_%s\",{%s}]}".format(quote(sym),remap(sym.Type),currHelperFuncIdx,inputs.map("\""+quote(_)+"\"").mkString(","),helperFuncIdx,unpackObject(sym).map(f => "\"%s\":\"%s\"".format(f._1,remap(f._2)).replaceAll("__global ","")).mkString(","))
+    //MetaData.gpuOutput = "{\"%s\":[\"%s\",\"allocFunc_%s\",[%s],\"copyOutputDtoH_%s\",{%s}]}".format(quote(sym),remap(sym.tp),currHelperFuncIdx,inputs.map("\""+quote(_)+"\"").mkString(","),helperFuncIdx,unpackObject(sym).map(f => "\"%s\":\"%s\"".format(f._1,remap(f._2)).replaceAll("__global ","")).mkString(","))
     gpuOutputs = gpuOutputs :+ sym
 
     // Write to helper function string
     //helperFuncString.append(tempString)
-	helperFuncString.append(allocOutputStr)
-	helperFuncString.append(copyOutputStr)
+  helperFuncString.append(allocOutputStr)
+  helperFuncString.append(copyOutputStr)
   }
 
 
@@ -661,18 +663,18 @@ trait OpenCLCodegen extends GPUCodegen {
 
     val inputs = (gpuOutputs ::: gpuInputs ::: gpuTemps)
     val paramStr = inputs.map(ele=>
-			if(isObjectType(ele.Type)) remap(ele.Type) + " *" + quote(ele)
-			else remap(ele.Type) + " " + quote(ele)
-	  ).mkString(",")
+      if(isObjectType(ele.tp)) remap(ele.tp) + " *" + quote(ele)
+      else remap(ele.tp) + " " + quote(ele)
+    ).mkString(",")
     val argStr = inputs.map("\""+quote(_)+"\"").mkString(",")
     val argInputStr = inputs.map(quote(_)).mkString(",")
 
     //TODO: Restore safety check for the dimension sizes
     out.append("int gpuBlockSizeX_%s_%s(%s) {\n".format(syms.map(quote(_)).mkString(""),helperFuncIdx,paramStr))
-	  if(xDimList.length==0)
+    if(xDimList.length==0)
       out.append("\tint X = 1;\n")
-	  else
-	    out.append("\tint X = %s;\n".format(xDimList(xDimList.length-1)))
+    else
+      out.append("\tint X = %s;\n".format(xDimList(xDimList.length-1)))
     out.append("\tif(X < %s) return X;\n".format(MAX_THREADS_PER_BLOCK))
     out.append("\telse return %s;\n".format(MAX_THREADS_PER_BLOCK))
     out.append("}\n")
@@ -689,16 +691,16 @@ trait OpenCLCodegen extends GPUCodegen {
     MetaData.gpuBlockSizeZ = "[\"gpuBlockSizeZ_%s_%s\",[%s]]".format(syms.map(quote(_)).mkString(""),helperFuncIdx,argStr)
 
     out.append("int gpuDimSizeX_%s_%s(%s) {\n".format(syms.map(quote(_)).mkString(""),helperFuncIdx,paramStr))
-	  if(xDimList.length==0)
-    	out.append("\tint X = 1;\n")
-	  else
-    	out.append("\tint X = %s;\n".format(xDimList(xDimList.length-1)))
+    if(xDimList.length==0)
+      out.append("\tint X = 1;\n")
+    else
+      out.append("\tint X = %s;\n".format(xDimList(xDimList.length-1)))
     out.append("\treturn 1+((X-1)/%s);\n".format(MAX_THREADS_PER_BLOCK))
     out.append("}\n")
     MetaData.gpuDimSizeX = "[\"gpuDimSizeX_%s_%s\",[%s]]".format(syms.map(quote(_)).mkString(""),helperFuncIdx,argStr)
 
     out.append("int gpuDimSizeY_%s_%s(%s) {\n".format(syms.map(quote(_)).mkString(""),helperFuncIdx,paramStr))
-	  out.append("\treturn 1;\n")
+    out.append("\treturn 1;\n")
     out.append("}\n")
     MetaData.gpuDimSizeY = "[\"gpuDimSizeY_%s_%s\",[%s]]".format(syms.map(quote(_)).mkString(""),helperFuncIdx,argStr)
     out.toString
@@ -711,7 +713,7 @@ trait OpenCLCodegen extends GPUCodegen {
     //if(sym == kernelSymbol) {
       // Emit code for library call function
       val inputs = (gpuOutputs ::: gpuInputs)
-      val paramStr = inputs.map(ele=>remap(ele.Type) + " " + quote(ele)).mkString(",")
+      val paramStr = inputs.map(ele=>remap(ele.tp) + " " + quote(ele)).mkString(",")
       out.append("void gpuLibCall_%s(%s) {\n".format(quote(sym),paramStr))
       
       for(s <- stmts)
@@ -720,7 +722,7 @@ trait OpenCLCodegen extends GPUCodegen {
       helperFuncString.append(out.toString)
 
       // Add to metadata
-      //MetaData.gpuLibCall = "{\"%s\":[\"%s\",\"gpuMemAlloc_%s_%s\",[%s]]}".format(quote(newSym),remap(newSym.Type),quote(kernelSymbol),quote(newSym),argStrTemp)
+      //MetaData.gpuLibCall = "{\"%s\":[\"%s\",\"gpuMemAlloc_%s_%s\",[%s]]}".format(quote(newSym),remap(newSym.tp),quote(kernelSymbol),quote(newSym),argStrTemp)
       MetaData.gpuLibCall = "\"gpuLibCall_%s\"".format(quote(sym))
     //}
     //else {
@@ -739,7 +741,7 @@ trait OpenCLNestedCodegen extends GenericNestedCodegen with OpenCLCodegen {
   
   def OpenCLConsts(x:Exp[Any], s:String): String = {
     s match {
-      case "Infinity" => "std::numeric_limits<%s>::max()".format(remap(x.Type))
+      case "Infinity" => "std::numeric_limits<%s>::max()".format(remap(x.tp))
       case _ => s
     }
   }
@@ -748,7 +750,6 @@ trait OpenCLNestedCodegen extends GenericNestedCodegen with OpenCLCodegen {
     case Const(s: String) => "\""+s+"\""
     case Const(null) => "NULL"
     case Const(z) => OpenCLConsts(x, z.toString)
-    case Sym(-1) => "_"
     case _ => super.quote(x)
   }
   

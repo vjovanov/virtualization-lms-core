@@ -13,13 +13,13 @@ import java.lang.{StackTraceElement,Thread}
 trait Expressions extends Utils {
 
   abstract class Exp[+T:Manifest] { // constants/symbols (atomic)
-    def Type : Manifest[T @uncheckedVariance] = manifest[T] //invariant position! but hey...
+    def tp: Manifest[T @uncheckedVariance] = manifest[T] //invariant position! but hey...
   }
 
   case class Const[+T:Manifest](x: T) extends Exp[T]
 
   case class Sym[+T:Manifest](val id: Int) extends Exp[T] {
-    var sourceInfo = Thread.currentThread.getStackTrace // until we can get useful info out of the manifest
+    @transient var sourceInfo = Thread.currentThread.getStackTrace // until we can get useful info out of the manifest
   }
 
   case class Variable[+T](val e: Exp[Variable[T]]) // TODO: decide whether it should stay here ... FIXME: should be invariant
@@ -27,39 +27,84 @@ trait Expressions extends Utils {
   var nVars = 0
   def fresh[T:Manifest] = Sym[T] { nVars += 1; nVars -1 }
 
-  abstract class Def[+T] // operations (compos  ite)
+  abstract class Def[+T] // operations (composite)
 
-  //abstract class Stm // statement (links syms and definitions)
+  abstract class Stm // statement (links syms and definitions)
   
-  case class TP[+T](sym: Sym[T], rhs: Def[T]) //extends Stm
+  def infix_lhs(stm: Stm): List[Sym[Any]] = stm match {
+    case TP(sym, rhs) => List(sym)
+  }
+  
+  def infix_rhs(stm: Stm): Any = stm match { // clients use syms(e.rhs), boundSyms(e.rhs) etc.
+    case TP(sym, rhs) => rhs
+  }
 
-  var globalDefs: List[TP[Any]] = Nil
+  def infix_defines[A](stm: Stm, sym: Sym[A]): Option[Def[A]] = stm match {
+    case TP(`sym`, rhs: Def[A]) => Some(rhs)
+    case _ => None
+  }
 
-  def findDefinition[T](s: Sym[T]): Option[TP[T]] =
-    globalDefs.find(_.sym == s).asInstanceOf[Option[TP[T]]]
+  def infix_defines[A](stm: Stm, rhs: Def[A]): Option[Sym[A]] = stm match {
+    case TP(sym: Sym[A], `rhs`) => Some(sym)
+    case _ => None
+  }
+  
+  case class TP[+T](sym: Sym[T], rhs: Def[T]) extends Stm
 
-  def findDefinition[T](d: Def[T]): Option[TP[T]] =
-    globalDefs.find(_.rhs == d).asInstanceOf[Option[TP[T]]]
+  // graph construction state
+  
+  var globalDefs: List[Stm] = Nil
+  var localDefs: List[Stm] = Nil
 
-  def findOrCreateDefinition[T:Manifest](d: Def[T]): TP[T] =
+  def reifySubGraph[T](b: =>T): (T, List[Stm]) = {
+    val saveLocal = localDefs
+    val saveGlobal = globalDefs
+    localDefs = Nil
+    val r = b
+    val defs = localDefs
+    localDefs = saveLocal
+    globalDefs = saveGlobal
+    (r, defs)
+  }
+
+  def reflectSubGraph(ds: List[Stm]): Unit = {
+    val lhs = ds.flatMap(_.lhs)
+    assert(lhs.length == lhs.distinct.length, "multiple defs: " + ds)
+    val existing = globalDefs filter (_.lhs exists (lhs contains _))
+    assert(existing.isEmpty, "already defined: " + existing + " for " + ds)
+    localDefs = localDefs ::: ds
+    globalDefs = globalDefs ::: ds
+  }
+
+  def findDefinition[T](s: Sym[T]): Option[Stm] =
+    globalDefs.find(x => x.defines(s).nonEmpty)
+
+  def findDefinition[T](d: Def[T]): Option[Stm] =
+    globalDefs.find(x => x.defines(d).nonEmpty)
+
+  def findOrCreateDefinition[T:Manifest](d: Def[T]): Stm =
     findDefinition[T](d).getOrElse {
       createDefinition(fresh[T], d)
     }
 
-  def createDefinition[T](s: Sym[T], d: Def[T]): TP[T] = {
+  def findOrCreateDefinitionExp[T:Manifest](d: Def[T]): Exp[T] =
+    findOrCreateDefinition(d).defines(d).get
+
+  def createDefinition[T](s: Sym[T], d: Def[T]): Stm = {
     val f = TP(s, d)
-    globalDefs = globalDefs:::List(f)
+    reflectSubGraph(List(f))
     f
   }
+  
 
   protected implicit def toAtom[T:Manifest](d: Def[T]): Exp[T] = {
-    findOrCreateDefinition(d).sym // TODO: return Const(()) if type is Unit??
+    findOrCreateDefinitionExp(d) // TODO: return Const(()) if type is Unit??
   }
 
   object Def {
     def unapply[T](e: Exp[T]): Option[Def[T]] = e match { // really need to test for sym?
       case s @ Sym(_) =>
-        findDefinition(s).map(_.rhs)
+        findDefinition(s).flatMap(_.defines(s))
       case _ =>
         None
     }
@@ -76,9 +121,6 @@ trait Expressions extends Utils {
 
   def boundSyms(e: Any): List[Sym[Any]] = e match {
     case p: Product => p.productIterator.toList.flatMap(boundSyms(_))
-
-
-
     case _ => Nil
   }
 
@@ -87,6 +129,12 @@ trait Expressions extends Utils {
     case _ => Nil
   }
 
+  def softSyms(e: Any): List[Sym[Any]] = e match {
+    // empty by default
+    //case s: Sym[Any] => List(s)
+    case p: Product => p.productIterator.toList.flatMap(softSyms(_))
+    case _ => Nil
+  }
 
 
   def rsyms[T](e: Any)(f: Any=>List[T]): List[T] = e match {
