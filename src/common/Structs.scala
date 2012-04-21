@@ -6,7 +6,7 @@ import util.OverloadHack
 import java.io.PrintWriter
 import internal.GenericFatCodegen
 
-trait StructOps extends Base {
+trait StructOps extends Base with ObjectOps with StringOps {
 
   abstract class Record extends Struct[Rep]
 
@@ -51,11 +51,8 @@ trait StructExp extends StructOps with BaseExp with EffectExp with ObjectOpsExp 
 
   case class SimpleStruct[T](tag: StructTag[T], elems: Map[String,Rep[Any]]) extends AbstractStruct[T]
   case class Field[T:Manifest](struct: Rep[Record], index: String) extends Def[T]
-  
-  def struct[T:Manifest](tag: StructTag[T], elems: (String, Rep[Any])*): Rep[T] = struct(tag, Map(elems:_*))
-  def struct[T:Manifest](tag: StructTag[T], elems: Map[String, Rep[Any]]): Rep[T] = SimpleStruct[T](tag, elems)
-    
-  def struct[T:Manifest](elems: (String, Rep[Any])*): Rep[T] = struct(ClassTag("Record"), Map(elems:_*))
+
+  def struct[T:Manifest](elems: (String, Rep[Any])*): Rep[T] = struct(ClassTag[T]("Record"), Map(elems:_*))
   def struct[T:Manifest](tag: StructTag[T], elems: Map[String, Rep[Any]]): Rep[T] = SimpleStruct[T](tag, elems)
 
   def field[T:Manifest](struct: Rep[Record], index: String): Rep[T] = Field[T](struct, index)
@@ -67,7 +64,7 @@ trait StructExp extends StructOps with BaseExp with EffectExp with ObjectOpsExp 
     def unapply[T](d: Def[T]) = unapplyStruct(d)
   }
 
-  def unapplyStruct[T](d: Def[T]): Option[StructTag[T], Map[String, Rep[Any]])] = d match {
+  def unapplyStruct[T](d: Def[T]): Option[(StructTag[T], Map[String, Rep[Any]])] = d match {
     case s: AbstractStruct[T] => Some((s.tag, s.elems))
     case _ => None
   }
@@ -80,7 +77,7 @@ trait StructExp extends StructOps with BaseExp with EffectExp with ObjectOpsExp 
   
   val encounteredStructs = new scala.collection.mutable.HashMap[Manifest[Any], Map[String, Manifest[Any]]]
   def registerStruct(m: Manifest[Any], elems: Map[String, Rep[Any]]) {
-    encounteredStructs(m) = elems.map(e => (e._1,e._2.Type)) //assume tag uniquely specifies struct shape
+    //TODO: what info uniquely specifies structs?
   }
   
   // FIXME: need  syms override because Map is not a Product
@@ -100,10 +97,10 @@ trait StructExp extends StructOps with BaseExp with EffectExp with ObjectOpsExp 
     case _ => super.mirror(e,f)
   }
 
-  override def object_toString(x: Exp[Any]) = x match {
+  override def object_toString(x: Exp[Any])(implicit pos: SourceContext): Exp[String] = x match {
     case Def(Struct(tag, elems)) => //tag(elem1, elem2, ...)
       val e = elems.map(e=>string_plus(unit(e._1 + " = "), object_toString(e._2))).reduceLeft((l,r)=>string_plus(string_plus(l,unit(", ")),r))
-      string_plus(unit(tag.mkString(" ")+"("),string_plus(e,unit(")")))
+      string_plus(unit(tag.toString+"("),string_plus(e,unit(")")))
     case _ => super.object_toString(x)
   }
 }
@@ -237,11 +234,11 @@ trait ScalaGenStruct extends ScalaGenBase {
   val IR: StructExp
   import IR._
 
-  override def emitNode(sym: Sym[Any], rhs: Def[Any])(implicit stream: PrintWriter) = rhs match {
+  override def emitNode(sym: Sym[Any], rhs: Def[Any]) = rhs match {
     case Struct(tag, elems) =>
-      registerStruct(sym.Type, elems)
-      emitValDef(sym, "new " + structName(sym.Type) + "(" + elems.map(e => quote(e._2)).mkString(",") + ")")
-      println("WARNING: emitting " + tag.mkString(" ") + " struct " + quote(sym))
+      registerStruct(sym.tp, elems)
+      emitValDef(sym, "new " + structName(sym.tp) + "(" + elems.map(e => quote(e._2)).mkString(",") + ")")
+      println("WARNING: emitting " + tag.toString + " struct " + quote(sym))
     case f@Field(struct, index) =>
       emitValDef(sym, quote(struct) + "." + index)
       println("WARNING: emitting field access: " + quote(struct) + "." + index)

@@ -7,11 +7,11 @@ import scala.virtualization.lms.internal.{GenerationFailedException}
 import scala.reflect.SourceContext
 
 trait ObjectOps extends Variables with OverloadHack {
-  def infix_toString(lhs: Rep[Any])(implicit pos: SourceContext) = object_tostring(lhs)
-  def infix_toStringL(lhs: Rep[Any])(implicit pos: SourceContext) = object_tostring(lhs)
+  def infix_toString(lhs: Rep[Any])(implicit pos: SourceContext) = object_toString(lhs)
+  def infix_toStringL(lhs: Rep[Any])(implicit pos: SourceContext) = object_toString(lhs)
   def infix_unsafeImmutable[A:Manifest](lhs: Rep[A])(implicit pos: SourceContext) = object_unsafe_immutable(lhs)
 
-  def object_tostring(lhs: Rep[Any])(implicit pos: SourceContext): Rep[String]
+  def object_toString(lhs: Rep[Any])(implicit pos: SourceContext): Rep[String]
   def object_unsafe_immutable[A:Manifest](lhs: Rep[A])(implicit pos: SourceContext): Rep[A]
 }
 
@@ -19,7 +19,7 @@ trait ObjectOpsExp extends ObjectOps with VariablesExp {
   case class ObjectToString(o: Exp[Any]) extends Def[String]
   case class ObjectUnsafeImmutable[A](o: Exp[A]) extends Def[A]
 
-  def object_tostring(lhs: Exp[Any])(implicit pos: SourceContext) = ObjectToString(lhs)
+  def object_toString(lhs: Exp[Any])(implicit pos: SourceContext) = ObjectToString(lhs)
   def object_unsafe_immutable[A:Manifest](lhs: Exp[A])(implicit pos: SourceContext) = ObjectUnsafeImmutable(lhs)
 
   //////////////
