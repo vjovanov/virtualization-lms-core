@@ -4,13 +4,12 @@ package common
 import scala.virtualization.lms.internal.{GenericFatCodegen,GenerationFailedException}
 import reflect.{SourceContext, RefinedManifest}
 
-//import test7.{ArrayLoops,ArrayLoopsExp,ArrayLoopsFatExp,ScalaGenArrayLoops,ScalaGenFatArrayLoopsFusionOpt,TransformingStuff} // TODO: eliminate deps
 import util.OverloadHack
 import java.io.PrintWriter
 
 trait StructOps extends Base {
 
-  abstract class Record extends Struct[Rep] //TODO: name?
+  abstract class Record extends Struct[Rep]
 
   implicit def repToStructOps(s: Rep[Record]) = new StructOpsCls(s)
   class StructOpsCls(s: Rep[Record]) {
@@ -31,7 +30,7 @@ trait StructOps extends Base {
 
 }
 
-trait StructExp extends StructOps with BaseExp with EffectExp with OverloadHack {
+trait StructExp extends StructOps with BaseExp with EffectExp with ObjectOpsExp with StringOpsExp with OverloadHack {
 
   def anonStruct[T:Manifest](fields: Seq[(String, Boolean, Rep[T] => Rep[_])]): Rep[T] = {
     val x = fresh[T]
@@ -50,8 +49,9 @@ trait StructExp extends StructOps with BaseExp with EffectExp with OverloadHack 
   }
 
   def structName[T](m: Manifest[T]): String = m match {
-    case rm: RefinedManifest[T] => rm.erasure.getSimpleName + "_" + rm.fields.map(f => structName(f._2)).mkString("_")
-    case _ => m.erasure.getSimpleName + m.typeArguments.map(a => structName(a)).mkString("_")
+    case rm: RefinedManifest[T] => rm.erasure.getSimpleName + rm.fields.map(f => structName(f._2)).mkString("")
+    case _ if (m <:< manifest[AnyVal]) => m.toString
+    case _ => m.erasure.getSimpleName + m.typeArguments.map(a => structName(a)).mkString("")
   }
 
   abstract class AbstractStruct[T] extends Def[T] { //base class for 'NewDSLType' nodes to allow DSL pattern-matching
@@ -63,7 +63,7 @@ trait StructExp extends StructOps with BaseExp with EffectExp with OverloadHack 
   case class Field[T:Manifest](struct: Rep[Record], index: String) extends Def[T]
 
   def struct[T:Manifest](elems: (String, Rep[Any])*): Rep[T] = struct(Map(elems:_*))
-  def struct[T:Manifest](elems: Map[String, Rep[Any]]): Rep[T] = struct(List(structName(manifest[T])),elems)
+  def struct[T:Manifest](elems: Map[String, Rep[Any]]): Rep[T] = struct(List("Record"),elems)
   def struct[T:Manifest](tag: List[String], elems: Map[String, Rep[Any]]): Rep[T] = GenericStruct[T](tag, elems)
 
   def field[T:Manifest](struct: Rep[Record], index: String): Rep[T] = Field[T](struct, index)
@@ -73,11 +73,10 @@ trait StructExp extends StructOps with BaseExp with EffectExp with OverloadHack 
   def mfield[T:Manifest](struct: Rep[Record], index: String): Exp[T] = reflectMutable(Field[T](struct, index))
   def vfield[T:Manifest](struct: Rep[Record], index: String): Variable[T] = Variable(Field[Variable[T]](struct, index))
 
-  //val encounteredStructs = new scala.collection.mutable.HashMap[List[String], Map[String, Manifest[Any]]]
-  //def registerStruct(tag: List[String], elems: Map[String, Rep[Any]]) {
-  //  encounteredStructs(tag) = elems.map(e => (e._1,e._2.Type)) //assume tag uniquely specifies struct shape
-  //}
-  //def structType[T:Manifest] = encounteredStructs.get(List(structName(manifest[T])))
+  val encounteredStructs = new scala.collection.mutable.HashMap[Manifest[Any], Map[String, Manifest[Any]]]
+  def registerStruct(m: Manifest[Any], elems: Map[String, Rep[Any]]) {
+    encounteredStructs(m) = elems.map(e => (e._1,e._2.Type)) //assume tag uniquely specifies struct shape
+  }
 
   // FIXME: need  syms override because Map is not a Product
   override def syms(x: Any): List[Sym[Any]] = x match {
@@ -94,6 +93,13 @@ trait StructExp extends StructOps with BaseExp with EffectExp with OverloadHack 
     case GenericStruct(tag, elems) => struct(tag, elems map { case (k,v) => (k, f(v)) })
     case Field(struct, index) => field(f(struct), index)
     case _ => super.mirror(e,f)
+  }
+
+  override def object_toString(x: Exp[Any]) = x match {
+    case Def(Struct(tag, elems)) => //tag(elem1, elem2, ...)
+      val e = elems.map(e=>string_plus(unit(e._1 + " = "), object_toString(e._2))).reduceLeft((l,r)=>string_plus(string_plus(l,unit(", ")),r))
+      string_plus(unit(tag.mkString(" ")+"("),string_plus(e,unit(")")))
+    case _ => super.object_toString(x)
   }
 }
 
@@ -165,37 +171,6 @@ trait StructExpOptCommon extends StructExpOpt with VariablesExp with IfThenElseE
 
 }
 
-/*
-
-At the moment arrays still live in test case land, not in lms.common.
-
-trait StructExpOptLoops extends StructExpOptCommon with ArrayLoopsExp {
-
-  override def simpleLoop[A:Manifest](size: Exp[Int], v: Sym[Int], body: Def[A]): Exp[A] = body match {
-    case ArrayElem(Def(Struct(tag, elems))) =>
-      struct[A]("Array"::tag, elems.map(p=>(p._1,simpleLoop(size, v, ArrayElem(p._2)))))
-    case ArrayElem(Def(ArrayIndex(b,v))) if infix_length(b) == size => b.asInstanceOf[Exp[A]] // eta-reduce! <--- should live elsewhere, not specific to struct
-    case _ => super.simpleLoop(size, v, body)
-  }
-
-  override def infix_at[T:Manifest](a: Rep[Array[T]], i: Rep[Int]): Rep[T] = a match {
-    case Def(Struct(pre::tag,elems:Map[String,Exp[Array[T]]])) =>
-      assert(pre == "Array")
-      struct[T](tag, elems.map(p=>(p._1,infix_at(p._2, i))))
-    case _ => super.infix_at(a,i)
-  }
-
-  override def infix_length[T:Manifest](a: Rep[Array[T]]): Rep[Int] = a match {
-    case Def(Struct(pre::tag,elems:Map[String,Exp[Array[T]]])) =>
-      assert(pre == "Array")
-      val ll = elems.map(p=>infix_length(p._2)) // all arrays must have same length!
-      ll reduceLeft { (a1,a2) => assert(a1 == a2); a1 }
-    case _ => super.infix_length(a)
-  }
-
-}
-*/
-
 
 // the if/phi stuff is more general than structs -- could be used for variable assignments as well
 
@@ -251,7 +226,7 @@ trait StructFatExpOptCommon extends StructFatExp with StructExpOptCommon with If
         }        
         k -> phi(cond,u,elemsA(k),v,elemsB(k))(combinedResult)(mtype(tp))
       }
-      println("----- " + combinedResult + " / " + elemsNew)
+      println("----- " + combinedResult + " / " + elemsNew.toString)
       struct[T](tagA, elemsNew.toMap)
 
     case _ => super.ifThenElse(cond,a,b)
@@ -269,7 +244,8 @@ trait ScalaGenStruct extends ScalaGenBase {
 
   override def emitNode(sym: Sym[Any], rhs: Def[Any])(implicit stream: PrintWriter) = rhs match {
     case Struct(tag, elems) =>
-      emitValDef(sym, "new " + tag.last + "(" + elems.map(e => quote(e._2)).mkString(",") + ")")
+      registerStruct(sym.Type, elems)
+      emitValDef(sym, "new " + structName(sym.Type) + "(" + elems.map(e => quote(e._2)).mkString(",") + ")")
       println("WARNING: emitting " + tag.mkString(" ") + " struct " + quote(sym))
       //emitValDef(sym, "Map(" + elems.map(e => "\"" + e._1 + "\"->" + quote(e._2)).mkString(",") + ") //" + tag.mkString(" "))
     case f@Field(struct, index) =>
@@ -279,22 +255,22 @@ trait ScalaGenStruct extends ScalaGenBase {
     case _ => super.emitNode(sym, rhs)
   }
 
-  /* override def remap[A](m: Manifest[A]) = m match {
+  override def remap[A](m: Manifest[A]) = m match {
     case s if s <:< manifest[Record] => structName(m)
     case _ => super.remap(m)
-  } */
+  }
 
   override def emitDataStructures(path: String) {
-  /*  val stream = new PrintWriter(path + "Structs.scala")
+    val stream = new PrintWriter(path + "Structs.scala")
     stream.println("package generated.scala")
-    for ((tag, elems) <- encounteredStructs) {
+    for ((tp, elems) <- encounteredStructs) {
       stream.println()
-      stream.print("case class " + tag.mkString("") + "(")
+      stream.print("case class " + structName(tp) + "(")
       stream.println(elems.map(e => e._1 + ": " + remap(e._2)).mkString(", ") + ")")
     }
     stream.close()
     super.emitDataStructures(path)
-  */}
+  }
 
 }
 

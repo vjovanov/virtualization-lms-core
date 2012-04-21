@@ -4,7 +4,7 @@ package common
 import java.io.PrintWriter
 import scala.virtualization.lms.internal._
 
-trait MiscOps extends Base {
+trait MiscOps extends Base with ObjectOps {
   /**
    * Other things that need to get lifted like exit, there should be
    * a better way to do this
@@ -23,15 +23,15 @@ trait MiscOps extends Base {
 
 
 
-trait MiscOpsExp extends MiscOps with EffectExp {
-  case class Print(x: Exp[Any]) extends Def[Unit]
-  case class PrintLn(x: Exp[Any]) extends Def[Unit]
+trait MiscOpsExp extends MiscOps with ObjectOpsExp with EffectExp {
+  case class Print(x: Exp[String]) extends Def[Unit]
+  case class PrintLn(x: Exp[String]) extends Def[Unit]
   case class Exit(s: Exp[Int]) extends Def[Nothing]
   case class Error(s: Exp[String]) extends Def[Nothing]
   case class Return(x: Exp[Any]) extends Def[Unit]
 
-  def print(x: Exp[Any]) = reflectEffect(Print(x)) // TODO: simple effect
-  def println(x: Exp[Any]) = reflectEffect(PrintLn(x)) // TODO: simple effect
+  def print(x: Exp[Any]) = reflectEffect(Print(x.toStringL)) // TODO: simple effect
+  def println(x: Exp[Any]) = reflectEffect(PrintLn(x.toStringL)) // TODO: simple effect
   def exit(s: Exp[Int]) = reflectEffect(Exit(s))
   def error(s: Exp[String]) = reflectEffect(Error(s))
   def returnL(x: Exp[Any]) = reflectEffect(Return(x))

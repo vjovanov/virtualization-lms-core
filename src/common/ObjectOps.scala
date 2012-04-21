@@ -6,11 +6,11 @@ import scala.virtualization.lms.util.OverloadHack
 import scala.virtualization.lms.internal.{GenerationFailedException}
 
 trait ObjectOps extends Variables with OverloadHack {
-  def infix_toString(lhs: Rep[Any]) = object_tostring(lhs)
-  def infix_toStringL(lhs: Rep[Any]) = object_tostring(lhs)
+  def infix_toString(lhs: Rep[Any]) = object_toString(lhs)
+  def infix_toStringL(lhs: Rep[Any]) = object_toString(lhs)
   def infix_unsafeImmutable[A:Manifest](lhs: Rep[A]) = object_unsafe_immutable(lhs)
 
-  def object_tostring(lhs: Rep[Any]): Rep[String]
+  def object_toString(lhs: Rep[Any]): Rep[String]
 	def object_unsafe_immutable[A:Manifest](lhs: Rep[A]): Rep[A]
 }
 
@@ -18,7 +18,7 @@ trait ObjectOpsExp extends ObjectOps with VariablesExp {
   case class ObjectToString(o: Exp[Any]) extends Def[String]
   case class ObjectUnsafeImmutable[A](o: Exp[A]) extends Def[A]
 
-  def object_tostring(lhs: Exp[Any]) = ObjectToString(lhs)
+  def object_toString(lhs: Exp[Any]) = ObjectToString(lhs)
   def object_unsafe_immutable[A:Manifest](lhs: Exp[A]) = ObjectUnsafeImmutable(lhs)
 
   //////////////
