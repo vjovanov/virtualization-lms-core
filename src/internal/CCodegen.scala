@@ -91,6 +91,7 @@ trait CCodegen extends CLikeCodegen with CppHostTransfer {
 //    headerStream.println("#include <emmintrin.h>")
     headerStream.println("#include <xmmintrin.h>")
     headerStream.println("#include <pmmintrin.h>")
+    headerStream.println("#include <time.h>")
     headerStream.println(getDSLHeaders)
 
     super.initializeGenerator(buildDir, args, _analysisResults)

@@ -228,7 +228,9 @@ trait CGenTupleOps extends CGenBase {
   override def emitNode(sym: Sym[Any], rhs: Def[Any]) = rhs match {
     case ETuple3(a,b,c) if (a.tp == manifest[Float] && b.tp == manifest[Float] && c.tp == manifest[Float]) =>      
       stream.println("float " + quote(sym) + "[3] = { " + quote(a) + "," + quote(b) + "," + quote(c) + "};")
-    case Tuple3Access1(t) => emitValDef(sym, quote(t) + "[0]")
+    // FIXME: HACK
+    case Tuple3Access1(t) => stream.println(remap(sym.tp) + " *" + quote(sym) + "= &" + quote(t) + "[0];")
+    //case Tuple3Access1(t) => emitValDef(sym, quote(t) + "[0]")
     case Tuple3Access2(t) => emitValDef(sym, quote(t) + "[1]")
     case Tuple3Access3(t) => emitValDef(sym, quote(t) + "[2]")
     case _ => super.emitNode(sym, rhs)
