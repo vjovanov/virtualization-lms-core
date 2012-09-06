@@ -26,4 +26,3 @@ Follow the [installation instructions](http://www.scala-sbt.org/download.html#ma
 2. Run `sbt test` to run the test suite.
 
 3. Run `sbt publish-local` to install LMS-Core for use in other projects.
-
