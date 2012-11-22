@@ -11,7 +11,7 @@ object LMSBuild extends Build {
   // TODO: use M7 version
   val scalaTest = "org.scalatest" % "scalatest_2.10.0-M7" % "1.9-2.10.0-M7-B1" % "test"
   
-  val virtScala = Option(System.getenv("SCALA_VIRTUALIZED_VERSION")).getOrElse("2.10.0-M7")
+  val virtScala = Option(System.getenv("SCALA_VIRTUALIZED_VERSION")).getOrElse("2.10.0-RC1")
   
   val mpdeProj = RootProject(uri("./mpde/"))
  
