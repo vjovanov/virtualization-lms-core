@@ -31,7 +31,7 @@ trait RepDSL extends ScalaOpsPkg with LiftPrimitives with LiftBoolean with LiftS
       print(d)
     } // constant val and var definitions
 
-    // this works because implicit gets invoked on the method
+    // this works because the implicit gets invoked on the method
     {
       val i = 1
       val s = "y"
@@ -41,6 +41,103 @@ trait RepDSL extends ScalaOpsPkg with LiftPrimitives with LiftBoolean with LiftS
       testMethod(i, s, b, d)
     }
 
+    // assignment to variables does not work properly
+    {
+      /*
+       * This throws an exception at compilation time. Scala virtualized-bug.
+       * var scala = 2
+       * scala = 2.10
+       * scala = "perl"
+       */
+
+      // this throws a class cast exception
+      try {
+        var scala = 2
+        scala = "perl"
+        print(scala)
+      } catch {
+        case e: Throwable => ()
+      }
+
+      // this throws a class cast exception
+      try {
+        var scala = unit(2)
+        scala = unit("perl")
+      } catch {
+        case e: Throwable => System.out.println("")
+      }
+
+      // there should be a white list of language features
+      // and a nice warning that bans them if they are not allowed
+      {
+        // who allows the following
+        val x = if (true) 1 else 2
+
+        val y = scala.collection.immutable.List(1 -> 3) match { case scala.collection.immutable.List((1, 3)) => "nice DSL feature that does not exist" }
+
+        // what does this code do
+        val z = try {
+          throw new RuntimeException("?????")
+        } catch { case e: RuntimeException => () }
+
+        println(x)
+      }
+
+      /* Why does this fail?    
+    {
+        var scala = unit("scala 1")
+        {
+          var scala = unit("scala 2")
+          {
+            var scala = unit("dotty")
+            System.out.println(scala)
+          }
+          System.out.println(scala)
+        }
+        System.out.println(scala)
+      }
+    }*/
+
+      {
+        var scala = unit("scala 1")
+
+        {
+          var scala = unit("scala 2")
+
+          {
+            var scala = unit("dotty")
+
+            print(scala)
+          }
+
+          print(scala)
+
+        }
+
+        print(scala)
+      }
+
+      {
+        var scala = "scala 1"
+
+        {
+          var scala = "scala 2"
+
+          {
+            var scala = "dotty"
+
+            print(scala)
+          }
+
+          print(scala)
+
+        }
+
+        print(scala)
+      }
+
+    }
+
     // this would not work  because the variable will be of wrong type
     {
       var i = 1
@@ -48,9 +145,9 @@ trait RepDSL extends ScalaOpsPkg with LiftPrimitives with LiftBoolean with LiftS
       var b = true
       var d = 0.1
       val string = unit("string")
-      
+
       testMethod(i, s, b, d)
-      
+
       print(s + string)
     }
 
@@ -62,24 +159,102 @@ trait RepDSL extends ScalaOpsPkg with LiftPrimitives with LiftBoolean with LiftS
       var d: Rep[Double] = 0.1
 
       testMethod(i, s, b, d)
-      
     }
+
     ()
   }
 
+  /**
+   * How to reason about this???
+   *
+   * If we leave explicit control about the Rep types to the user we get a complex language that is hard to use.
+   * If the macro searches for the best match we can get into a very complex macro, or even exponential code explosion. Check this on an example!!!
+   */
   def tuples: Rep[Unit] = {
+    
+    def outer(t: Rep[(Int, Int)]): Unit = () 
+    
+    def inner(t: Tuple2[Rep[Int], Rep[Int]]): Unit = ()
+
+    val x = (1, 2)
+    // outer(x) // does not compile
+    
+    // outer((1,2)) // does not compile
+    
+    val xa: (Rep[Int], Rep[Int]) = (1, 2)
+    outer(xa)
+    
+    val xu = unit((1, 2))
+    print(outer(xu))
+
+    val y = unit((1, 2))
+    outer(y)
+    
+    val v = unit(2)
+    
+    val z = (unit(1), v)
+    inner(z)
+
+    
+    inner((1, 2))
+    
+    // how would it go for nested rep types???
+    /*
+     * This is not and should not be possible. Rep[Rep] causes a missing Manifest which makes sense. 
+     * def allrep(t: Rep[(Rep[Int], Rep[Int], Rep[Int])]) = t
+     * val all = unit((unit(1), unit(2), unit(3)));
+     * allrep(all)
+     */
+        
   }
+  
+  
+  /**
+   * This test finds the type inference related errors.
+   */
+  def inference(u: Rep[Unit]): Rep[Unit] = {
+     def m(x: Rep[Int]) = print(x) 
+     
+     val number = unit(1)
+     val cond = unit(true)
+     
+     
+     val x = if (cond) 1 else number
+     
+     
+     // m(x) // out of PerGen space
+     
+     
+  }
+ 
+  /**
+   * This test shows how recursion must specially annotated. The macro based approach should allow recursion. 
+   */
+  def recursion(u: Rep[Unit]): Rep[Unit] = {
+            
+  }
+  
 }
 
 class TestRepTypesErrors extends FileDiffSuite {
 
   val prefix = "test-out/epfl/test14-"
 
-  def testStaging1 = {
+  def testPolymorphicStaging1 = {
     withOutFile(prefix + "type-errors") {
       new RepDSL with ScalaOpsPkgExp { self =>
         val codegen = new ScalaCodeGenPkg with ScalaGenIfThenElse with ScalaGenOrderingOps { val IR: self.type = self }
         codegen.emitSource(valVarDef, "valVarDef", new PrintWriter(System.out))
+      }
+    }
+    //assertFileEqualsCheck(prefix + "staging1")
+  }
+  
+  def testPolymorphicStaging2 = {
+    withOutFile(prefix + "inference") {
+      new RepDSL with ScalaOpsPkgExp { self =>
+        val codegen = new ScalaCodeGenPkg with ScalaGenIfThenElse with ScalaGenOrderingOps { val IR: self.type = self }
+        codegen.emitSource(inference, "inference", new PrintWriter(System.out))
       }
     }
     //assertFileEqualsCheck(prefix + "staging1")
