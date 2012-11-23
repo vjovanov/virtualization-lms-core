@@ -12,7 +12,14 @@ import java.io.{ PrintWriter, StringWriter, FileOutputStream }
 import scala.reflect.SourceContext
 
 /**
- * Test that shows type system problems with Rep[T] DSL Interface.
+ * Test that shows type system problems with Rep[T] DSL Interface. The test should flush out what is not good with Rep based approach:
+ *   1) Type errors are not readable. There are many wierd errors that the developer can not reason about
+ *   2) Requires invocation of the unit parameter in some occasions
+ *      * Variable assignment with a constant
+ *      * Tuples
+ *   3) Does not allow recursion without annotations
+ *   4) Does not prevent the user from using scala language features
+ *   5) Pollutes the method signatures
  */
 trait RepDSL extends ScalaOpsPkg with LiftPrimitives with LiftBoolean with LiftString {
 
@@ -221,8 +228,8 @@ trait RepDSL extends ScalaOpsPkg with LiftPrimitives with LiftBoolean with LiftS
      
      val x = if (cond) 1 else number
      
-     
-     // m(x) // out of PerGen space
+     System.out.println(x.type)
+     // m(x) // out of PermGen space
      
      
   }
