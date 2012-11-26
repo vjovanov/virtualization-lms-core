@@ -28,36 +28,40 @@ trait RepDSL extends ScalaOpsPkg with LiftPrimitives with LiftBoolean with LiftS
    */
   def valVarDef(u: Rep[Unit]): Rep[Unit] = {
     def testMethod(a: Rep[Int], b: Rep[String], c: Rep[Boolean], d: Rep[Double]) = {
-      System.out.println(a.toString)
-      System.out.println(b.toString)
-      System.out.println(c.toString)
-      System.out.println(d.toString)
       print(a)
       print(b)
       print(c)
       print(d)
-    } // constant val and var definitions
+    }
 
-    // this works because the implicit gets invoked on the method
     {
       val i = 1
       val s = "y"
       val b = true
       val d = 0.1
 
+      // this works because the implicit gets invoked on the method      
       testMethod(i, s, b, d)
+      // Users tend to write the following (see project stanford-ppl/Delite with grep -rn "unit(" .) 
+      //      val i = unit(1)
+      //      val s = unit("y")
+      //      val b = unit(true)
+      //      val d = unit(0.1)
+      // TODO investigate why is that? Try to remove them in Delite and see what fails. 
     }
 
     // assignment to variables does not work properly
+    // we need to fix the scala-virtualized first and then reason about issues.
+    // FIXME one thing that will certainly fail is when we initialize variable with a constant.
     {
       /*
-       * This throws an exception at compilation time. Scala virtualized-bug.
+       * FIXME This throws an exception at compilation time. Scala virtualized-bug.
        * var scala = 2
        * scala = 2.10
        * scala = "perl"
        */
 
-      // this throws a class cast exception
+      // FIXME this throws a class cast exception
       try {
         var scala = 2
         scala = "perl"
@@ -66,7 +70,7 @@ trait RepDSL extends ScalaOpsPkg with LiftPrimitives with LiftBoolean with LiftS
         case e: Throwable => ()
       }
 
-      // this throws a class cast exception
+      // FIXME this throws a class cast exception and should fail at compile time.
       try {
         var scala = unit(2)
         scala = unit("perl")
@@ -74,23 +78,22 @@ trait RepDSL extends ScalaOpsPkg with LiftPrimitives with LiftBoolean with LiftS
         case e: Throwable => System.out.println("")
       }
 
-      // there should be a white list of language features
-      // and a nice warning that bans them if they are not allowed
+      // FIXME this should work
       {
-        // who allows the following
-        val x = if (true) 1 else 2
+        var i: Rep[Int] = 1
+        var b: Rep[Boolean] = true
+        var d: Rep[Double] = 0.1
+        // FIXME throws out of permgen space
+        //var s: Rep[String] = unit("y")
+        //s = "k"
+        var s: Rep[String] = unit("y")
 
-        val y = scala.collection.immutable.List(1 -> 3) match { case scala.collection.immutable.List((1, 3)) => "nice DSL feature that does not exist" }
-
-        // what does this code do
-        val z = try {
-          throw new RuntimeException("?????")
-        } catch { case e: RuntimeException => () }
-
-        println(x)
+        testMethod(i, s, b, d)
       }
+    }
 
-      /* Why does this fail?    
+    // TODO see what happens with the code below. How does var definition work in nested scopes. 
+    /* Why does this fail? TODO Investigate and try to fix if SourceContexts are broken.
     {
         var scala = unit("scala 1")
         {
@@ -105,142 +108,131 @@ trait RepDSL extends ScalaOpsPkg with LiftPrimitives with LiftBoolean with LiftS
       }
     }*/
 
-      {
-        var scala = unit("scala 1")
-
-        {
-          var scala = unit("scala 2")
-
-          {
-            var scala = unit("dotty")
-
-            print(scala)
-          }
-
-          print(scala)
-
-        }
-
-        print(scala)
-      }
-
-      {
-        var scala = "scala 1"
-
-        {
-          var scala = "scala 2"
-
-          {
-            var scala = "dotty"
-
-            print(scala)
-          }
-
-          print(scala)
-
-        }
-
-        print(scala)
-      }
-
-    }
-
-    // this would not work  because the variable will be of wrong type
-    {
-      var i = 1
-      var s = "y"
-      var b = true
-      var d = 0.1
-      val string = unit("string")
-
-      testMethod(i, s, b, d)
-
-      print(s + string)
-    }
-
-    // will this work ?
-    {
-      var i: Rep[Int] = 1
-      var s: Rep[String] = "y"
-      var b: Rep[Boolean] = true
-      var d: Rep[Double] = 0.1
-
-      testMethod(i, s, b, d)
-    }
-
     ()
   }
 
   /**
-   * How to reason about this???
+   * This test shows how regular scala constructs can be mixed with DSL code. This can create confusion with non-proficient users.
+   */
+  def whitelistOperations(v: Rep[Unit]): Rep[Unit] = {
+    // there should be a whitelist of language features
+    // and a nice warning that notes that they are banned
+    {
+      // FIXME The following operations should not be allowd in the DSL code       
+      val y = scala.collection.immutable.List(1 -> 3) match {
+        case scala.collection.immutable.List((1, 3)) => "Nice DSL feature that does not exist"
+      }
+
+      // what does this code do
+      val z = try {
+        throw new RuntimeException("?????")
+      } catch { case e: RuntimeException => () }
+
+      println("hey")
+    }
+  }
+
+  /**
+   * The test that shows errors related to tuples.
    *
    * If we leave explicit control about the Rep types to the user we get a complex language that is hard to use.
-   * If the macro searches for the best match we can get into a very complex macro, or even exponential code explosion. Check this on an example!!!
+   * If the macro searches for the best match we can get into a very complex macro, or even exponential search space explosion.
+   * Check this on an example!!!
    */
-  def tuples: Rep[Unit] = {
-    
-    def outer(t: Rep[(Int, Int)]): Unit = () 
-    
-    def inner(t: Tuple2[Rep[Int], Rep[Int]]): Unit = ()
+  def tuples(v: Rep[Unit]): Rep[Unit] = {
+
+    def outer(t: Rep[(Int, Int)]): Unit = print(t)
+    def inner(t: Tuple2[Rep[Int], Rep[Int]]): Unit = print(t)
 
     val x = (1, 2)
     // outer(x) // does not compile
-    
     // outer((1,2)) // does not compile
-    
+    // TODO can this be fixed by better implicits
+
     val xa: (Rep[Int], Rep[Int]) = (1, 2)
     outer(xa)
-    
+
     val xu = unit((1, 2))
-    print(outer(xu))
+    outer(xu)
 
-    val y = unit((1, 2))
-    outer(y)
-    
-    val v = unit(2)
-    
-    val z = (unit(1), v)
-    inner(z)
+    {
+      val v = unit(2)
 
-    
+      // FIXME it should work without the unit
+      val z = (unit(1), v)
+      inner(z)
+    }
+
     inner((1, 2))
-    
-    // how would it go for nested rep types???
-    /*
-     * This is not and should not be possible. Rep[Rep] causes a missing Manifest which makes sense. 
-     * def allrep(t: Rep[(Rep[Int], Rep[Int], Rep[Int])]) = t
-     * val all = unit((unit(1), unit(2), unit(3)));
-     * allrep(all)
-     */
-        
+
   }
-  
-  
+
+  def intop(x: Rep[Int]) = print(x)
+  def intmap(x: Rep[Int] => Rep[Int]) = x(1)
+
+  // TODO Type inference issues 
+  // closure returns a constant: {x => 1} will be inferred as Rep[?] => Int.
+  // closure returns an conditional: if (passes > max_passes) unit(0) else max_passes - passes  
   /**
    * This test finds the type inference related errors.
    */
   def inference(u: Rep[Unit]): Rep[Unit] = {
-     def m(x: Rep[Int]) = print(x) 
-     
-     val number = unit(1)
-     val cond = unit(true)
-     
-     
-     val x = if (cond) 1 else number
-     
-     System.out.println(x.type)
-     // m(x) // out of PermGen space
-     
-     
+    def m(x: Rep[Int]) = print(x.toString)
+
+    val number = unit(1)
+    val cond = unit(true)
+
+    // What will be the type of x? How is this achieved? 
+    {
+      val x = if (cond) number else 1
+      intop(x)
+    }
+
+    // FIXME
+    // m(x) // out of PermGen space TODO investigate
+
+    {
+      // how does this work? 
+      val x = if (unit(true)) if (unit(true)) { print(""); 1 } else { print(""); 2 } else 4
+      intop(x)
+    }
+
+    { // how does this work?
+      val v = unit(1)
+      intmap(x => if (unit(true)) 0 else v)
+    }
+
+    // FIXME methods does not have unit included if it is of type Rep[Unit]
+    {
+      // def m: Rep[Unit] = 1
+    }
+    ()
   }
- 
+
   /**
-   * This test shows how recursion must specially annotated. The macro based approach should allow recursion. 
+   * This test shows how recursion must specially annotated. The macro based approach should allow recursion as in regular
+   * Scala.
    */
   def recursion(u: Rep[Unit]): Rep[Unit] = {
-            
+
+    def gcd(x: Rep[Int], y: Rep[Int]): Rep[Int] =
+      if (y == 0) x
+      else gcd(x, x % y)
+
+    // FIXME this causes the stack overflow.
+    // gcd(1213, 898987)
+    
+    ()
   }
-  
+
+  /**
+   * This test shows examples of ugly error messages. This can be added later as we do the work.
+   * I have seen a lot of them so I know they exist.
+   */
+  def typeErrors(u: Rep[Unit]): Rep[Unit] = {
+
+  }
+
 }
 
 class TestRepTypesErrors extends FileDiffSuite {
@@ -248,7 +240,7 @@ class TestRepTypesErrors extends FileDiffSuite {
   val prefix = "test-out/epfl/test14-"
 
   def testPolymorphicStaging1 = {
-    withOutFile(prefix + "type-errors") {
+    withOutFile(prefix + "var-val") {
       new RepDSL with ScalaOpsPkgExp { self =>
         val codegen = new ScalaCodeGenPkg with ScalaGenIfThenElse with ScalaGenOrderingOps { val IR: self.type = self }
         codegen.emitSource(valVarDef, "valVarDef", new PrintWriter(System.out))
@@ -256,12 +248,42 @@ class TestRepTypesErrors extends FileDiffSuite {
     }
     //assertFileEqualsCheck(prefix + "staging1")
   }
-  
+
   def testPolymorphicStaging2 = {
     withOutFile(prefix + "inference") {
       new RepDSL with ScalaOpsPkgExp { self =>
         val codegen = new ScalaCodeGenPkg with ScalaGenIfThenElse with ScalaGenOrderingOps { val IR: self.type = self }
         codegen.emitSource(inference, "inference", new PrintWriter(System.out))
+      }
+    }
+    //assertFileEqualsCheck(prefix + "staging1")
+  }
+
+  def testPolymorphicStaging3 = {
+    withOutFile(prefix + "recursion") {
+      new RepDSL with ScalaOpsPkgExp { self =>
+        val codegen = new ScalaCodeGenPkg with ScalaGenIfThenElse with ScalaGenOrderingOps { val IR: self.type = self }
+        codegen.emitSource(recursion, "recursion", new PrintWriter(System.out))
+      }
+    }
+    //assertFileEqualsCheck(prefix + "staging1")
+  }
+
+  def testPolymorphicStaging4 = {
+    withOutFile(prefix + "whitelistOperations") {
+      new RepDSL with ScalaOpsPkgExp { self =>
+        val codegen = new ScalaCodeGenPkg with ScalaGenIfThenElse with ScalaGenOrderingOps { val IR: self.type = self }
+        codegen.emitSource(whitelistOperations, "whitelistOperations", new PrintWriter(System.out))
+      }
+    }
+    //assertFileEqualsCheck(prefix + "staging1")
+  }
+
+  def testPolymorphicStaging5 = {
+    withOutFile(prefix + "tuples") {
+      new RepDSL with ScalaOpsPkgExp { self =>
+        val codegen = new ScalaCodeGenPkg with ScalaGenIfThenElse with ScalaGenOrderingOps { val IR: self.type = self }
+        codegen.emitSource(tuples, "tuples", new PrintWriter(System.out))
       }
     }
     //assertFileEqualsCheck(prefix + "staging1")

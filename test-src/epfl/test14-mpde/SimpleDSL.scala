@@ -100,11 +100,11 @@ class TestMPDE extends FileDiffSuite {
 
   val prefix = "test-out/epfl/test14-"
 
-  def testStaging1 = {
+  def testMPDE1 = {
     withOutFile(prefix + "simple-dsl") {
       new MPDESimple with SimpleDSLExp with IfThenElseExp with OrderingOpsExp { self =>
         val codegen = new SimpleDSLGen with  ScalaGenIfThenElse with ScalaGenOrderingOps { val IR: self.type = self }
-        codegen.emitSource(test, "Test", new PrintWriter(System.out))
+        codegen.emitSource(test, "simple-dsl", new PrintWriter(System.out))
       }
     }
     //assertFileEqualsCheck(prefix + "staging1")
