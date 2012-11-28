@@ -53,12 +53,12 @@ trait RepDSL extends ScalaOpsPkg with LiftPrimitives with LiftBoolean with LiftS
     // assignment to variables does not work properly
     // we need to fix the scala-virtualized first and then reason about issues.
     // FIXME one thing that will certainly fail is when we initialize variable with a constant.
-    {
-      /*
-       * FIXME This throws an exception at compilation time. Scala virtualized-bug.
-       * var scala = 2
-       * scala = 2.10
-       * scala = "perl"
+    {  // all var problems can be fixed by removing the bug in EmbeddedControls
+      
+      /* FIXME This throws an exception at compilation time. Scala virtualized-bug.
+       var scala = 2
+       scala = 2.10
+       scala = "perl"
        */
        
 
@@ -94,24 +94,24 @@ trait RepDSL extends ScalaOpsPkg with LiftPrimitives with LiftBoolean with LiftS
     }
 
     // TODO see what happens with the code below. How does var definition work in nested scopes. 
-    /* Why does this fail? TODO Investigate and try to fix if SourceContexts are broken.
+    /* Why does this fail? TODO Investigate and try to fix if SourceContexts are broken. */
     {
-        var scala = unit("scala 1")
-        {
-          var scala = unit("scala 2")
-          {
-            var scala = unit("dotty")
-            System.out.println(scala)
-          }
-          System.out.println(scala)
-        }
-        System.out.println(scala)
+      var scala = unit("scala 2")
+      // FIXME if we remove the line below the compiler thinks that we are providing the manifest.
+      // Since the macro will also take care of the manifests we should not have this issue.  
+      
+      {
+          var scala = unit("dotty")
+          
+          print(scala)          
       }
-    }*/
+    }
 
     ()
   }
 
+  // TODO algebraic data types
+  
   /**
    * This test shows how regular scala constructs can be mixed with DSL code. This can create confusion with non-proficient users.
    */
@@ -124,11 +124,12 @@ trait RepDSL extends ScalaOpsPkg with LiftPrimitives with LiftBoolean with LiftS
         case scala.collection.immutable.List((1, 3)) => "Nice DSL feature that does not exist"
       }
 
-      // what does this code do
+      // This should not be allowed in the DSL
       val z = try {
         throw new RuntimeException("?????")
       } catch { case e: RuntimeException => () }
 
+      // This should be lifted
       println("hey")
     }
   }
@@ -226,7 +227,7 @@ trait RepDSL extends ScalaOpsPkg with LiftPrimitives with LiftBoolean with LiftS
 
     // FIXME this causes the stack overflow.
     // gcd(1213, 898987)
-    
+
     ()
   }
 
