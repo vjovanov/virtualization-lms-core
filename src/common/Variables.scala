@@ -58,6 +58,15 @@ trait Variables extends Base with OverloadHack with VariableImplicits with ReadV
   def __assign[T:Manifest](lhs: Var[T], rhs: T)(implicit pos: SourceContext) = {System.out.println("V[T], T"); var_assign(lhs, unit(rhs))}
   def __assign[T](lhs: Var[T], rhs: Rep[T])(implicit o: Overloaded1, mT: Manifest[T], pos: SourceContext) = {System.out.println("V[T], Rep[T]"); var_assign(lhs, rhs);}
   def __assign[T](lhs: Var[T], rhs: Var[T])(implicit o: Overloaded2, mT: Manifest[T], pos: SourceContext) = {System.out.println("V[T], Rep[T]"); var_assign(lhs, readVar(rhs))}
+  
+  /* This should be the definition of the methods but embedded controls do not support it.
+  
+  def var_assign[T, U <: T](lhs: Var[T], rhs: Rep[T])(implicit pos: SourceContext, mU: Manifest[U]): Rep[Unit]
+  def __assign[T, U <: T](lhs: Var[T], rhs: U)(implicit pos: SourceContext, mU: Manifest[U]) = var_assign(lhs, unit(rhs))
+  def __assign[T, U <: T](lhs: Var[T], rhs: Rep[U])(implicit o: Overloaded1, mU: Manifest[U], pos: SourceContext) = var_assign(lhs, rhs)
+  def __assign[T, U <: T](lhs: Var[T], rhs: Var[U])(implicit o: Overloaded2, mU: Manifest[U], pos: SourceContext) = var_assign(lhs, readVar(rhs))
+  */
+  
 /*
   def __assign[T,U](lhs: Var[T], rhs: Rep[U])(implicit o: Overloaded2, mT: Manifest[T], mU: Manifest[U], conv: Rep[U]=>Rep[T]) = var_assign(lhs, conv(rhs))
 */

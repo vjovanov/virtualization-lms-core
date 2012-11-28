@@ -30,23 +30,23 @@ trait SimpleDSL extends Base {
   object Vector {
     def op1[T: Manifest](v: T): Rep[T] = ???
 
-    def op1_rep[T: Manifest](v: Rep[T])(implicit sc: SourceContext): Rep[T]= ???
+    def op1_rep[T: Manifest](v: Rep[T]): Rep[T]= ???
   }
 
   // simple method
-  def op1[T: Manifest](v: T): T
+  def op1[T](v: T): T
 
-  def op1_rep[T: Manifest](v: Rep[T])(implicit sc: SourceContext): Rep[T]
+  def op1_rep[T](v: Rep[T]): Rep[T]
 
   // infix binary method
-  def infix_op2[T: Manifest](a: String, i: T): String
+  def infix_op2[T](a: String, i: T): String
 
-  def infix_op2_rep[T: Manifest](a: Rep[String], i: Rep[T])(implicit sc: SourceContext): Rep[String]
+  def infix_op2_rep[T](a: Rep[String], i: Rep[T]): Rep[String]
   
   // TODO add other examples
   //  * Scala type classes
   //  * Interface from the OptiML
-
+  
 }
 
 /**
@@ -54,22 +54,22 @@ trait SimpleDSL extends Base {
 */
 trait SimpleDSLExp extends BaseExp {
 
-  def op1[T: Manifest](v: T): T = {
+  def op1[T](v: T): T = {
     println("op1")
     v
   }
 
-  def op1_rep[T: Manifest](v: Rep[T])(implicit sc: SourceContext): Rep[T] = {
+  def op1_rep[T](v: Rep[T]): Rep[T] = {
     System.out.println("REP op1")
     v
   }
 
-  def infix_op2[T: Manifest](a: String, i: T): String = {
+  def infix_op2[T](a: String, i: T): String = {
     System.out.println("infix_op2")
     a
   }
 
-  def infix_op2_rep[T: Manifest](a: Rep[String], i: Rep[T])(implicit sc: SourceContext): Rep[String] = {
+  def infix_op2_rep[T](a: Rep[String], i: Rep[T]): Rep[String] = {
     System.out.println("NO REP infix_op2")
     a
   }
@@ -81,7 +81,7 @@ trait SimpleDSLGen extends ScalaGenBase {
 
 
 /**
- * The DSL it self.
+ * The simple DSL program.
  */
 trait MPDESimple extends SimpleDSL with MPDE {
   
@@ -89,7 +89,7 @@ trait MPDESimple extends SimpleDSL with MPDE {
     val res = "Hello" op2 op1(1)
  
     ()
-  }
+  }: Unit // this annotations is here just for the moment since the desired interface is with reps
 
 }
 
