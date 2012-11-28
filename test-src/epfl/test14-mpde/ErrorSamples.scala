@@ -60,6 +60,7 @@ trait RepDSL extends ScalaOpsPkg with LiftPrimitives with LiftBoolean with LiftS
        * scala = 2.10
        * scala = "perl"
        */
+       
 
       // FIXME this throws a class cast exception
       try {
@@ -177,19 +178,23 @@ trait RepDSL extends ScalaOpsPkg with LiftPrimitives with LiftBoolean with LiftS
    * This test finds the type inference related errors.
    */
   def inference(u: Rep[Unit]): Rep[Unit] = {
-    def m(x: Rep[Int]) = print(x.toString)
+    
 
     val number = unit(1)
     val cond = unit(true)
 
     // What will be the type of x? How is this achieved? 
     {
+      def m(x: Rep[Int]) = print(x.toString)
+      
       val x = if (cond) number else 1
-      intop(x)
+      // FIXME
+      // m(x) // out of PermGen space TODO investigate
+//    intop(x)      
+          
     }
 
-    // FIXME
-    // m(x) // out of PermGen space TODO investigate
+      
 
     {
       // how does this work? 
