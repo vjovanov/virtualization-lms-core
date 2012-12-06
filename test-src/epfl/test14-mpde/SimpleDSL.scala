@@ -26,6 +26,7 @@ trait MPDE extends Base {
 */
 trait SimpleDSL extends Base {
 
+  
   // object method
   object Vector {
     def op1[T: Manifest](v: T): Rep[T] = ???
@@ -53,7 +54,7 @@ trait SimpleDSL extends Base {
 * Simple DSL execution
 */
 trait SimpleDSLExp extends BaseExp {
-
+  
   def op1[T](v: T): T = {
     println("op1")
     v
@@ -64,13 +65,17 @@ trait SimpleDSLExp extends BaseExp {
     v
   }
 
+  def println(v: Any) = System.out.println(v)
+  
+  def println_rep(v: Rep[Any]) = System.out.println("rep:" + v)
+  
   def infix_op2[T](a: String, i: T): String = {
     System.out.println("infix_op2")
     a
   }
 
   def infix_op2_rep[T](a: Rep[String], i: Rep[T]): Rep[String] = {
-    System.out.println("NO REP infix_op2")
+    System.out.println("REP infix_op2")
     a
   }
 }
@@ -84,10 +89,16 @@ trait SimpleDSLGen extends ScalaGenBase {
  * The simple DSL program.
  */
 trait MPDESimple extends SimpleDSL with MPDE {
-  
+  // TODO temporary change for the macro should do the work of lifting by either:  
+  // 1) finding corresponding conversion method for the type (by some convention)
+  // 2) having a single lift method that magically lifts all the types. Magically means using type signature evidence. 
+  implicit def intToRep(i: Int): Rep[Int] = unit(i)
+  implicit def stringToRep(s: String): Rep[String] = unit(s)
+
   def test(u: Rep[Unit]): Rep[Unit] = lift {
-    val res = "Hello" op2 op1(1)
- 
+    val x = "Hello" op2 op1(1)
+    val y = op1(x)
+    println(x)
     ()
   }: Unit // this annotations is here just for the moment since the desired interface is with reps
 
