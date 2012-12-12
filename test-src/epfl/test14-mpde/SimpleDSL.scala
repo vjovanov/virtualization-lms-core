@@ -60,10 +60,11 @@ trait SimpleDSLExp extends BaseExp {
   }
 
   def op1_rep[T](v: Rep[T]): Rep[T] = {
-    System.out.println("REP op1")
+    println("REP op1")
     v
   }
 
+  
   def infix_op2[T](a: String, i: T): String = {
     System.out.println("infix_op2")
     a

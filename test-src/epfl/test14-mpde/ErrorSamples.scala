@@ -15,11 +15,14 @@ import scala.reflect.SourceContext
  * Test that shows type system problems with Rep[T] DSL Interface. The test should flush out what is not good with Rep based approach:
  *   1) Type errors are not readable. There are many wierd errors that the developer can not reason about
  *   2) Requires invocation of the unit parameter in some occasions
- *      * Variable assignment with a constant
+ *      * Arithmetic operations
  *      * Tuples
  *   3) Does not allow recursion without annotations
- *   4) Does not prevent the user from using scala language features
+ *   4) Does not prevent the user from using Scala language features
  *   5) Pollutes the method signatures
+ *   6) Requires infix_method notation
+ *   7) User code is not modular 
+ *   8) User code can not be debugged
  */
 trait RepDSL extends ScalaOpsPkg with LiftPrimitives with LiftBoolean with LiftString {
 
@@ -61,7 +64,7 @@ trait RepDSL extends ScalaOpsPkg with LiftPrimitives with LiftBoolean with LiftS
        scala = "perl"
        */
        
-
+      // BUG in Scala-Virtualized
       // FIXME this throws a class cast exception
       try {
         var scala = 2
@@ -71,7 +74,7 @@ trait RepDSL extends ScalaOpsPkg with LiftPrimitives with LiftBoolean with LiftS
         case e: Throwable => ()
       }
 
-      // FIXME this throws a class cast exception and should fail at compile time.
+      // BUG this throws a class cast exception and should fail at compile time.
       try {
         var scala = unit(2)
         scala = unit("perl")
@@ -79,12 +82,12 @@ trait RepDSL extends ScalaOpsPkg with LiftPrimitives with LiftBoolean with LiftS
         case e: Throwable => System.out.println("")
       }
 
-      // FIXME this should work
+      // BUG this should work
       {
         var i: Rep[Int] = 1
         var b: Rep[Boolean] = true
         var d: Rep[Double] = 0.1
-        // FIXME throws out of permgen space
+        // BUG throws out of permgen space
         //var s: Rep[String] = unit("y")
         //s = "k"
         var s: Rep[String] = unit("y")
@@ -142,7 +145,7 @@ trait RepDSL extends ScalaOpsPkg with LiftPrimitives with LiftBoolean with LiftS
    * Check this on an example!!!
    */
   def tuples(v: Rep[Unit]): Rep[Unit] = {
-
+    
     def outer(t: Rep[(Int, Int)]): Unit = print(t)
     def inner(t: Tuple2[Rep[Int], Rep[Int]]): Unit = print(t)
 
@@ -163,6 +166,9 @@ trait RepDSL extends ScalaOpsPkg with LiftPrimitives with LiftBoolean with LiftS
       // FIXME it should work without the unit
       val z = (unit(1), v)
       inner(z)
+      
+      val x = (1, v)
+      outer(x)
     }
 
     inner((1, 2))
@@ -189,7 +195,7 @@ trait RepDSL extends ScalaOpsPkg with LiftPrimitives with LiftBoolean with LiftS
       def m(x: Rep[Int]) = print(x.toString)
       
       val x = if (cond) number else 1
-      // FIXME
+      // BUG
       // m(x) // out of PermGen space TODO investigate
 //    intop(x)      
           
@@ -210,7 +216,7 @@ trait RepDSL extends ScalaOpsPkg with LiftPrimitives with LiftBoolean with LiftS
 
     // FIXME methods does not have unit included if it is of type Rep[Unit]
     {
-      // def m: Rep[Unit] = 1
+      // def m: Rep[Int] = 1
     }
     ()
   }
@@ -227,7 +233,10 @@ trait RepDSL extends ScalaOpsPkg with LiftPrimitives with LiftBoolean with LiftS
 
     // FIXME this causes the stack overflow.
     // gcd(1213, 898987)
-
+    // 
+    // def gcd(x: Rep[Int], y: Rep[Int]): Rep[Int] = lam {
+    //   if (y == 0) x
+    //   else gcd(x, x % y) }
     ()
   }
 
