@@ -104,7 +104,14 @@ trait GenericCodegen extends BlockTraversal {
 
   def emitValDef(sym: Sym[Any], rhs: String): Unit
 
-  def emitSource[T : Manifest, R : Manifest](f: Exp[T] => Exp[R], className: String, stream: PrintWriter): List[(Sym[Any], Any)] = {
+  def emitSource[T : Manifest, R : Manifest](f: Exp[T] => Exp[R], className: String, stream: PrintWriter): List[(Sym[Any], Any)] = emitSource(f, className, stream)
+  
+  def emitSource0[T : Manifest](f: Exp[T], className: String, stream: PrintWriter): List[(Sym[Any], Any)] = {
+    val body = reifyBlock(f)
+    emitSource(List(), body, className, stream)
+  }
+  
+  def emitSource1[T : Manifest, R : Manifest](f: Exp[T] => Exp[R], className: String, stream: PrintWriter): List[(Sym[Any], Any)] = {
     val s = fresh[T]
     val body = reifyBlock(f(s))
     emitSource(List(s), body, className, stream)
