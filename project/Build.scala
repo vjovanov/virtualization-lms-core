@@ -9,9 +9,7 @@ object LMSBuild extends Build {
    
   val scalaTest = "org.scalatest" % "scalatest_2.10.0-RC2" % "2.0.M4-B2" % "test"
   
-  val virtScala = Option(System.getenv("SCALA_VIRTUALIZED_VERSION")).getOrElse("2.10.0-RC3")
+  val virtScala = Option(System.getenv("SCALA_VIRTUALIZED_VERSION")).getOrElse("2.10.1-RC1")
   
-  val mpdeProj = RootProject(uri("./mpde/"))
- 
-  lazy val lms = Project("LMS", file(".")).dependsOn(mpdeProj)
+  lazy val lms = Project("LMS", file("."))
 }

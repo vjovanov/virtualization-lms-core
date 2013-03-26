@@ -20,7 +20,10 @@ trait Expressions extends Utils {
     def pos: List[SourceContext] = Nil
   }
 
-  case class Const[+T:Manifest](x: T) extends Exp[T]
+  val constBuff = new scala.collection.mutable.ArrayBuffer[Any]()  
+  case class Const[+T:Manifest](x: T) extends Exp[T] {
+    constBuff += this
+  }
 
   case class Sym[+T:Manifest](val id: Int) extends Exp[T] {
     var sourceInfo = Thread.currentThread.getStackTrace // will go away
@@ -257,6 +260,7 @@ trait Expressions extends Utils {
   def reset { // used by delite?
     nVars = 0
     globalDefs = Nil
+    constBuff.clear()
   }
 
 }
