@@ -79,7 +79,7 @@ trait ObjectOpsExp extends ObjectOps with VariablesExp {
 
 trait ObjectOpsExpOpt extends ObjectOpsExp {
   override def object_tostring(lhs: Exp[Any])(implicit pos: SourceContext) = {
-    if (lhs.tp <:< manifest[String]) lhs.asInstanceOf[Exp[String]]
+    if (lhs.tp <:< typeRep[String]) lhs.asInstanceOf[Exp[String]]
     else super.object_tostring(lhs)
   }
 }

@@ -7,7 +7,7 @@ import java.io.PrintWriter
 import scala.reflect.SourceContext
 
 trait RangeOps extends Base {
-  // workaround for infix not working with manifests
+  // workaround for infix not working with typereps
   implicit def repRangeToRangeOps(r: Rep[Range]) = new rangeOpsCls(r)
   class rangeOpsCls(r: Rep[Range]){
     def foreach(f: Rep[Int] => Rep[Unit])(implicit pos: SourceContext) = range_foreach(r, f)

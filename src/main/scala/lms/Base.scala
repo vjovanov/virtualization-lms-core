@@ -10,49 +10,27 @@ trait LiftAll extends Base {
   protected implicit def __unit[T:TypeRep](x: T) = unit(x)
 }
 
-
-
-
+/**
+ * Component for abstraction over the run-time representation of types. The `TypeRep` abstraction
+ * can carry additional information with the run-time type (e.g. bit width for hardware representation).
+ *
+ * NOTE: Parametric types must be lifted explicitly since compiler does not generate
+ * TypeRep[X[T]] if implict TypeRep[T] is in scope. For example, @see LiftArrayType.
+ */
 trait TypeRepBase {
-  /*
-   * Abstraction over the run-time type information.
-   */
   trait TypeRep[T] {
     def mf: Manifest[T]
+
     def typeArguments: List[Manifest[_]]
     def arrayManifest: Manifest[Array[T]]
     def runtimeClass: java.lang.Class[_]
-    def wrap: scala.reflect.ClassTag[Array[T]]
-    def newArray(len: Int): Array[T]
-    def unapply(x: Any): Option[T]
-    def unapply(x: Byte): Option[T]
-    def unapply(x: Short): Option[T]
-    def unapply(x: Char): Option[T]
-    def unapply(x: Int): Option[T]
-    def unapply(x: Long): Option[T]
-    def unapply(x: Float): Option[T]
-    def unapply(x: Double): Option[T]
-    def unapply(x: Boolean): Option[T]
-    def unapply(x: Unit): Option[T]
     def <:<(that: TypeRep[_]): Boolean
   }
 
-  case class TypeRepExp[T](mf: Manifest[T]) extends TypeRep[T] {
+  case class TypeExp[T](mf: Manifest[T]) extends TypeRep[T] {
     def typeArguments: List[Manifest[_]]   = mf.typeArguments
     def arrayManifest: Manifest[Array[T]] = mf.arrayManifest
     def runtimeClass: java.lang.Class[_] = mf.runtimeClass
-    def wrap: scala.reflect.ClassTag[Array[T]] = mf.wrap
-    def newArray(len: Int): Array[T] = mf.newArray(len)
-    def unapply(x: Any): Option[T] = mf.unapply(x)
-    def unapply(x: Byte): Option[T] = mf.unapply(x)
-    def unapply(x: Short): Option[T] = mf.unapply(x)
-    def unapply(x: Char): Option[T] = mf.unapply(x)
-    def unapply(x: Int): Option[T] = mf.unapply(x)
-    def unapply(x: Long): Option[T] = mf.unapply(x)
-    def unapply(x: Float): Option[T] = mf.unapply(x)
-    def unapply(x: Double): Option[T] = mf.unapply(x)
-    def unapply(x: Boolean): Option[T] = mf.unapply(x)
-    def unapply(x: Unit): Option[T]     = mf.unapply(x)
     def <:<(that: TypeRep[_]): Boolean = mf.<:<(that.mf)
     override def canEqual(that: Any): Boolean = mf.canEqual(that)
     override def equals(that: Any): Boolean = mf.equals(that)
@@ -61,9 +39,8 @@ trait TypeRepBase {
   }
 
   def typeRep[T](implicit tr: TypeRep[T]): TypeRep[T] = tr
-  implicit def typeRepFromManifest[T](implicit mf: Manifest[T]): TypeRep[T] = TypeRepExp(mf)
-  implicit def convertFromManifest[T](mf: Manifest[T]): TypeRep[T] = TypeRepExp(mf)
-  typeRep[Int]
+  implicit def typeRepFromManifest[T](implicit mf: Manifest[T]): TypeRep[T] = TypeExp(mf)
+  implicit def convertFromManifest[T](mf: Manifest[T]): TypeRep[T] = TypeExp(mf)
 }
 
 /**

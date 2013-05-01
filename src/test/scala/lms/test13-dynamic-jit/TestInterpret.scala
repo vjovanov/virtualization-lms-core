@@ -490,7 +490,7 @@ class TestInterpret extends FileDiffSuite {
 
     def dcompile(x: Rep[Compile], fA: Rep[HashMap[String,Any]]=>Rep[Any],
       fI: Rep[HashMap[String,Any]]=>Rep[Int]): Rep[RFun] =
-      unchecked("new ",manifest[RFun]," {\n"+/*}*/
+      unchecked("new ",typerep[RFun]," {\n"+/*}*/
         "type Rep[T] = ",x,".Rep[T]\n"+
         "type HM = scala.collection.mutable.HashMap[String,Any]\n"+
         "val fAny = ",x,".compile(",staticData[AnyRef](fA),".asInstanceOf[Rep[HM]=>Rep[Any]])\n"+

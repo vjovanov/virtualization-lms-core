@@ -12,7 +12,7 @@ trait LiftNumeric {
 
 trait NumericOps extends Variables {
 
-  // workaround for infix not working with manifests
+  // workaround for infix not working with typereps
   implicit def numericToNumericOps[T:Numeric:TypeRep](n: T) = new NumericOpsCls(unit(n))
   implicit def repNumericToNumericOps[T:Numeric:TypeRep](n: Rep[T]) = new NumericOpsCls(n)
   implicit def varNumericToNumericOps[T:Numeric:TypeRep](n: Var[T]) = new NumericOpsCls(readVar(n))

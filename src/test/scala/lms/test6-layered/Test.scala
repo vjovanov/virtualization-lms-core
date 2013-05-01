@@ -121,7 +121,7 @@ trait VectorsImpl extends Vectors with FunctionsExp with UtilExp {
 trait VectorsImplExternal extends VectorsImpl {
 
   type Vector = Array[Double]
-  def mV = manifest[Array[Double]]
+  def mV = typeRep[Array[Double]]
 
   val base = "scala.lms.test6.VectorOps.%s"
 
@@ -148,7 +148,7 @@ object VectorOps {
 trait VectorsImplConst extends VectorsImpl {
 
   type Vector = Array[Double]
-  def mV = manifest[Array[Double]]
+  def mV = typeRep[Array[Double]]
 
   // kernels implementations as function-type constants
 
