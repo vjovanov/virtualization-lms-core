@@ -21,7 +21,7 @@ import scala.reflect.SourceContext
  *   4) Does not prevent the user from using Scala language features
  *   5) Pollutes the method signatures
  *   6) Requires infix_method notation
- *   7) User code is not modular 
+ *   7) User code is not modular
  *   8) User code can not be debugged
  */
 trait RepDSL extends ScalaOpsPkg with LiftPrimitives with LiftBoolean with LiftString {
@@ -43,27 +43,27 @@ trait RepDSL extends ScalaOpsPkg with LiftPrimitives with LiftBoolean with LiftS
       val b = true
       val d = 0.1
 
-      // this works because the implicit gets invoked on the method      
+      // this works because the implicit gets invoked on the method
       testMethod(i, s, b, d)
-      // Users tend to write the following (see project stanford-ppl/Delite with grep -rn "unit(" .) 
+      // Users tend to write the following (see project stanford-ppl/Delite with grep -rn "unit(" .)
       //      val i = unit(1)
       //      val s = unit("y")
       //      val b = unit(true)
       //      val d = unit(0.1)
-      // TODO investigate why is that? Try to remove them in Delite and see what fails. 
+      // TODO investigate why is that? Try to remove them in Delite and see what fails.
     }
 
     // assignment to variables does not work properly
     // we need to fix the scala-virtualized first and then reason about issues.
     // FIXME one thing that will certainly fail is when we initialize variable with a constant.
     {  // all var problems can be fixed by removing the bug in EmbeddedControls
-      
+
       /* FIXME This throws an exception at compilation time. Scala virtualized-bug.
        var scala = 2
        scala = 2.10
        scala = "perl"
        */
-       
+
       // BUG in Scala-Virtualized
       // FIXME this throws a class cast exception
       try {
@@ -96,17 +96,17 @@ trait RepDSL extends ScalaOpsPkg with LiftPrimitives with LiftBoolean with LiftS
       }
     }
 
-    // TODO see what happens with the code below. How does var definition work in nested scopes. 
+    // TODO see what happens with the code below. How does var definition work in nested scopes.
     /* Why does this fail? TODO Investigate and try to fix if SourceContexts are broken. */
     {
       var scala = unit("scala 2")
       // FIXME if we remove the line below the compiler thinks that we are providing the manifest.
-      // Since the macro will also take care of the manifests we should not have this issue.  
-      
+      // Since the macro will also take care of the manifests we should not have this issue.
+
       {
           var scala = unit("dotty")
-          
-          print(scala)          
+
+          print(scala)
       }
     }
 
@@ -114,7 +114,7 @@ trait RepDSL extends ScalaOpsPkg with LiftPrimitives with LiftBoolean with LiftS
   }
 
   // TODO algebraic data types
-  
+
   /**
    * This test shows how regular scala constructs can be mixed with DSL code. This can create confusion with non-proficient users.
    */
@@ -122,7 +122,7 @@ trait RepDSL extends ScalaOpsPkg with LiftPrimitives with LiftBoolean with LiftS
     // there should be a whitelist of language features
     // and a nice warning that notes that they are banned
     {
-      // FIXME The following operations should not be allowd in the DSL code       
+      // FIXME The following operations should not be allowd in the DSL code
       val y = scala.collection.immutable.List(1 -> 3) match {
         case scala.collection.immutable.List((1, 3)) => "Nice DSL feature that does not exist"
       }
@@ -145,7 +145,7 @@ trait RepDSL extends ScalaOpsPkg with LiftPrimitives with LiftBoolean with LiftS
    * Check this on an example!!!
    */
   def tuples(v: Rep[Unit]): Rep[Unit] = {
-    
+
     def outer(t: Rep[(Int, Int)]): Unit = print(t)
     def inner(t: Tuple2[Rep[Int], Rep[Int]]): Unit = print(t)
 
@@ -166,7 +166,7 @@ trait RepDSL extends ScalaOpsPkg with LiftPrimitives with LiftBoolean with LiftS
       // FIXME it should work without the unit
       val z = (unit(1), v)
       inner(z)
-      
+
       val x = (1, v)
       //outer(x)
     }
@@ -178,33 +178,33 @@ trait RepDSL extends ScalaOpsPkg with LiftPrimitives with LiftBoolean with LiftS
   def intop(x: Rep[Int]) = print(x)
   def intmap(x: Rep[Int] => Rep[Int]) = x(1)
 
-  // TODO Type inference issues 
+  // TODO Type inference issues
   // closure returns a constant: {x => 1} will be inferred as Rep[?] => Int.
-  // closure returns an conditional: if (passes > max_passes) unit(0) else max_passes - passes  
+  // closure returns an conditional: if (passes > max_passes) unit(0) else max_passes - passes
   /**
    * This test finds the type inference related errors.
    */
   def inference(u: Rep[Unit]): Rep[Unit] = {
-    
+
 
     val number = unit(1)
     val cond = unit(true)
 
-    // What will be the type of x? How is this achieved? 
+    // What will be the type of x? How is this achieved?
     {
       def m(x: Rep[Int]) = print(x.toString)
-      
+
       val x = if (cond) number else 1
       // BUG
       // m(x) // out of PermGen space TODO investigate
-//    intop(x)      
-          
+//    intop(x)
+
     }
 
-      
+
 
     {
-      // how does this work? 
+      // how does this work?
       val x = if (unit(true)) if (unit(true)) { print(""); 1 } else { print(""); 2 } else 4
       intop(x)
     }
@@ -233,7 +233,7 @@ trait RepDSL extends ScalaOpsPkg with LiftPrimitives with LiftBoolean with LiftS
 
     // FIXME this causes the stack overflow.
     // gcd(1213, 898987)
-    // 
+    //
     // def gcd(x: Rep[Int], y: Rep[Int]): Rep[Int] = lam {
     //   if (y == 0) x
     //   else gcd(x, x % y) }
@@ -246,12 +246,50 @@ trait RepDSL extends ScalaOpsPkg with LiftPrimitives with LiftBoolean with LiftS
    */
   def typeErrors(u: Rep[Unit]): Rep[Unit] = {
     {
-      val one: Rep[Int] = 1;
-      val void: Rep[Unit] = ()
-      one + void // ill typed term
+     // val one: Rep[Int] = 1;
+     // val void: Rep[Unit] = ()
+     // one + void // ill typed term
+     // No implicit view available from RepDSL.this.Rep[Unit] => Int.
     }
-    // TODO vjovanov
-    // TODO hubert
+
+
+    {
+      //val x: Rep[Array[Int]] = NewArray[Int](10)
+      //x foreach { x =>
+      //  x + "a"
+      //}
+      //[error] type mismatch;
+      //[error]  found   : RepDSL.this.Rep[String]
+      //[error]  required: RepDSL.this.Rep[Unit]
+    }
+
+    def abs(t: Int): Int = ???
+
+    {
+      // Rep types end up in non-rep types. This can have a nicer error.
+      // val x: Rep[Int] = 1
+      // val y = abs(x)
+      // [error] found   : RepDSL.this.Rep[Int]
+      // [error]  required: Int
+    }
+
+
+    {
+      // Ugly errors with virtualization
+      // val x: Rep[Int] = 1
+      // val z: Rep[Int] = if (x) 1 else 2
+      // [error] /home/vjovanov/code/lms/test-src/epfl/test15-terrors/ErrorSamples.scala:280: [Suppressed for performance reasons (SI-6149). Compile with -DshowSuppressedErrors=true to show].
+    }
+
+    {
+      // Erasure is evil
+      // def m(x: Rep[Int]) = ???
+      // def m(x: Rep[String]) = ???
+      // method m is defined twice
+      // [error]   conflicting symbols both originated in file '/home/vjovanov/code/lms/test-src/epfl/test15-terrors/ErrorSamples.scala'
+      // [error]       def m(x: Rep[String]) = ???
+    }
+
   }
 
 }
