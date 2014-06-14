@@ -9,7 +9,6 @@ organization := "EPFL"
 
 //scalaHome := Some(file(Path.userHome + "/scala/build/pack"))
 
-scalaOrganization := "org.scala-lang.virtualized"
 
 //scalaBinaryVersion := virtScala
 
@@ -19,17 +18,15 @@ scalaSource in Compile <<= baseDirectory(_ / "src")
 
 scalaSource in Test <<= baseDirectory(_ / "test-src")
 
-scalacOptions += "-Yvirtualize"
-
 //scalacOptions += "-Yvirtpatmat"
 
 //scalacOptions in Compile ++= Seq(/*Unchecked, */Deprecation)
 
 
 // needed for scala.tools, which is apparently not included in sbt's built in version
-libraryDependencies += "org.scala-lang.virtualized" % "scala-library" % virtScala
+libraryDependencies += "org.scala-lang" % "scala-library" % virtScala
 
-libraryDependencies += "org.scala-lang.virtualized" % "scala-compiler" % virtScala
+libraryDependencies += "org.scala-lang" % "scala-compiler" % virtScala
 
 libraryDependencies += "org.scala-lang" % "scala-actors" % virtScala // for ScalaTest
 
@@ -43,9 +40,3 @@ parallelExecution in Test := false
 publishArtifact in (Compile, packageDoc) := false
 
 
-// continuations
-autoCompilerPlugins := true
-
-addCompilerPlugin("org.scala-lang.virtualized.plugins" % "continuations" % virtScala)
-
-scalacOptions += "-P:continuations:enable"

@@ -23,7 +23,7 @@ trait BaseGenDSLOps extends GenericNestedCodegen {
 trait ScalaGenDSLOps extends ScalaGenEffect with BaseGenDSLOps {
   val IR: DSLOpsExp
   import IR._
-  
+
   override def emitNode(sym: Sym[Any], rhs: Def[Any]) = rhs match {
     case op: DSLOp[_] =>
       val b = op.representation
@@ -36,18 +36,3 @@ trait ScalaGenDSLOps extends ScalaGenEffect with BaseGenDSLOps {
   }
 
 }
-
-trait CLikeGenDSLOps extends BaseGenDSLOps with CLikeGenBase {
-  val IR: DSLOpsExp
-  import IR._
-
-  override def emitNode(sym: Sym[Any], rhs: Def[Any]) = rhs match {
-    case op: DSLOp[_] => throw new GenerationFailedException("CLikeGenDSLOps: DSLOp is not supported")
-    case _ => super.emitNode(sym, rhs)
-  }
-}
-
-trait CudaGenDSLOps extends CudaGenEffect with CLikeGenDSLOps
-trait OpenCLGenDSLOps extends OpenCLGenEffect with CLikeGenDSLOps
-trait CGenDSLOps extends CGenEffect with CLikeGenDSLOps
-

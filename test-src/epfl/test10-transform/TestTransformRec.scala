@@ -9,7 +9,7 @@ import test3._
 import test4._
 
 import java.io.{PrintWriter,StringWriter,FileOutputStream}
-import scala.reflect.SourceContext
+
 
 class TestTransformRec extends FileDiffSuite {
 

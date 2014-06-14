@@ -2,7 +2,6 @@ package scala.virtualization.lms
 package common
 
 import java.io.PrintWriter
-import scala.reflect.SourceContext
 
 trait ImplicitOps extends Base {
   /**
@@ -22,7 +21,7 @@ trait ImplicitOpsExp extends ImplicitOps with BaseExp {
   }
 
   override def mirror[A:Manifest](e: Def[A], f: Transformer)(implicit pos: SourceContext): Exp[A] = (e match {
-    case im@ImplicitConvert(x) => toAtom(ImplicitConvert(f(x))(im.mX,im.mY))(mtype(manifest[A]),pos)
+    case im@ImplicitConvert(x) => toAtom(ImplicitConvert(f(x))(im.mX,im.mY))(mtype(manifest[A]))
     case _ => super.mirror(e,f)
   }).asInstanceOf[Exp[A]]
 
@@ -39,20 +38,3 @@ trait ScalaGenImplicitOps extends ScalaGenBase {
     case _ => super.emitNode(sym, rhs)
   }
 }
-
-trait CLikeGenImplicitOps extends CLikeGenBase {
-  val IR: ImplicitOpsExp
-  import IR._
-
-  override def emitNode(sym: Sym[Any], rhs: Def[Any]) = {
-      rhs match {
-        case im@ImplicitConvert(x) =>
-          stream.println("%s %s = (%s)%s;".format(remap(im.mY), quote(sym), remap(im.mY), quote(x)))
-        case _ => super.emitNode(sym, rhs)
-      }
-    }
-}
-
-trait CudaGenImplicitOps extends CudaGenBase with CLikeGenImplicitOps
-trait OpenCLGenImplicitOps extends OpenCLGenBase with CLikeGenImplicitOps
-trait CGenImplicitOps extends CGenBase with CLikeGenImplicitOps

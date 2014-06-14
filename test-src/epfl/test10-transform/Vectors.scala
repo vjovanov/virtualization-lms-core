@@ -12,16 +12,16 @@ import test8._
 import util.OverloadHack
 
 import java.io.{PrintWriter,StringWriter,FileOutputStream}
-import scala.reflect.SourceContext
+
 
 /*
 
-  highest level: immutable Vectors 
-  
+  highest level: immutable Vectors
+
   for loops, map and reduce
-  
+
   mutable arrays, while loops
-  
+
 */
 
 
@@ -38,7 +38,7 @@ trait VectorOps extends Base {
 }
 
 trait VectorExp extends VectorOps with EffectExp {
-  
+
   case class VectorZeros(n: Rep[Int]) extends Def[Vector[Double]]
   case class VectorLiteral[T](a: List[Rep[T]]) extends Def[Vector[T]]
   case class VectorApply[T](a: Rep[Vector[T]], x: Rep[Int]) extends Def[T]
@@ -72,7 +72,7 @@ trait VectorExp extends VectorOps with EffectExp {
     case VectorPlus(a, b) => VectorPlus(f(a),f(b))
     case _ => super.mirrorDef(e,f)
   }).asInstanceOf[Def[A]] // why??
-  
+
   override def aliasSyms(e: Any): List[Sym[Any]] = e match {
     case _ => super.aliasSyms(e)
   }
@@ -99,7 +99,7 @@ trait VectorExpOpt extends VectorExp {
     case (a, Def(VectorZeros(n))) => a
     case _ => super.vplus(a,b)
   }
-  
+
 }
 
 trait ScalaGenVector extends ScalaGenBase {
