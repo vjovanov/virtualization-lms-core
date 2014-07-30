@@ -23,6 +23,7 @@ trait ArrayBufferOps extends Base {
     def clear()(implicit pos: SourceContext) = arraybuffer_clear(l)
     def toArray(implicit pos: SourceContext) = arraybuffer_toarray(l)
     def toSeq(implicit pos: SourceContext) = arraybuffer_toseq(l)
+    def size(implicit pos: SourceContext) = arraybuffer_size(l)
   }
 
   def arraybuffer_new[A: Manifest](xs: Seq[Rep[A]])(implicit pos: SourceContext): Rep[ArrayBuffer[A]]
@@ -33,6 +34,7 @@ trait ArrayBufferOps extends Base {
   def arraybuffer_toarray[A: Manifest](x: Rep[ArrayBuffer[A]])(implicit pos: SourceContext): Rep[Array[A]]
   def arraybuffer_toseq[A: Manifest](x: Rep[ArrayBuffer[A]])(implicit pos: SourceContext): Rep[Seq[A]]
   def arraybuffer_foreach[T: Manifest](x: Rep[ArrayBuffer[T]], block: Rep[T] => Rep[Unit])(implicit pos: SourceContext): Rep[Unit]
+  def arraybuffer_size[T: Manifest](x: Rep[ArrayBuffer[T]])(implicit pos: SourceContext): Rep[Int]
 }
 
 trait ArrayBufferOpsExp extends ArrayBufferOps with EffectExp {
@@ -43,6 +45,7 @@ trait ArrayBufferOpsExp extends ArrayBufferOps with EffectExp {
   case class ArrayBufferAppend[A: Manifest](l: Exp[ArrayBuffer[A]], e: Exp[A]) extends Def[Unit]
   case class ArrayBufferAppendSeq[A: Manifest](l: Exp[ArrayBuffer[A]], e: Exp[Seq[A]]) extends Def[Unit]
   case class ArrayBufferClear[A: Manifest](l: Exp[ArrayBuffer[A]]) extends Def[Unit]
+  case class ArrayBufferSize[A: Manifest](l: Exp[ArrayBuffer[A]]) extends Def[Int]
   case class ArrayBufferToArray[A: Manifest](x: Exp[ArrayBuffer[A]]) extends Def[Array[A]]
   case class ArrayBufferForeach[A: Manifest](x: Exp[ArrayBuffer[A]], i: Sym[A], block: Block[Unit]) extends Def[Unit]
   case class ArrayBufferToSeq[A: Manifest](x: Exp[ArrayBuffer[A]]) extends Def[Seq[A]]
@@ -59,7 +62,7 @@ trait ArrayBufferOpsExp extends ArrayBufferOps with EffectExp {
     val b = reifyEffects(block(x))
     reflectEffect(ArrayBufferForeach(l, x, b), summarizeEffects(b).star)
   }
-
+  def arraybuffer_size[T: Manifest](x: Rep[ArrayBuffer[T]])(implicit pos: SourceContext): Rep[Int] = ArrayBufferSize(x)
   //////////////
   // mirroring
 
@@ -110,6 +113,7 @@ trait ScalaGenArrayBufferOps extends BaseGenArrayBufferOps with ScalaGenEffect {
       emitBlock(block)
       stream.println(quote(getBlockResult(block)))
       stream.println("}")
+    case ArrayBufferSize(l) => emitValDef(sym, quote(l) + ".size")
     case _ => super.emitNode(sym, rhs)
   }
 }

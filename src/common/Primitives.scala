@@ -38,8 +38,8 @@ trait PrimitiveOps extends Variables with OverloadHack {
     def -(rhs: Rep[Double])(implicit o: Overloaded3, ctx: SourceContext): Rep[Double] = double_minus(repIntToRepDouble(lhs), rhs)
 
     def +(rhs: Rep[Int])(implicit o: Overloaded15): Rep[Int] = int_plus(lhs, rhs)(new SourceContext {})
-    def +(rhs: Rep[Float])(implicit o: Overloaded16, ctx: SourceContext): Rep[Float] = float_plus(repIntToRepFloat(lhs), rhs)
-    def +(rhs: Rep[Double])(implicit o: Overloaded17, ctx: SourceContext): Rep[Double] = double_plus(repIntToRepDouble(lhs), rhs)
+    def +(rhs: Rep[Float])(implicit o: Overloaded16): Rep[Float] = float_plus(repIntToRepFloat(lhs)(new SourceContext {}), rhs)(new SourceContext {})
+    def +(rhs: Rep[Double])(implicit o: Overloaded17): Rep[Double] = double_plus(repIntToRepDouble(lhs)(new SourceContext {}), rhs)(new SourceContext {})
   }
 
   implicit class FloatOps(lhs: Rep[Float]) {
