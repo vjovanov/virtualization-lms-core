@@ -395,7 +395,7 @@ trait ScalaGenStruct extends ScalaGenBase with BaseGenStruct {
   override def emitNode(sym: Sym[Any], rhs: Def[Any]) = rhs match {
     case Struct(tag, elems) =>
       registerStruct(structName(sym.tp), elems)
-      emitValDef(sym, "new " + structName(sym.tp) + "(" + elems.map(e => quote(e._2)).mkString(",") + ")")
+      emitValDef(sym, "new " + sym.tp.erasure.getSimpleName + "(" + elems.map(e => quote(e._2)).mkString(",") + ")")
     case FieldApply(struct, index) =>
       emitValDef(sym, quote(struct) + "." + index)
     case FieldUpdate(struct, index, rhs) =>

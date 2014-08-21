@@ -16,12 +16,59 @@ trait TupleOps extends Base {
         tuple2_get2(lhs)
     }
   }
+ implicit class Tuple3Ops[A:Manifest,B:Manifest,C:Manifest](lhs: Rep[(A, B, C)]) {
+    def _1: Rep[A] = {
+        implicit def sc = (new SourceContext{})
+        tuple3_get1(lhs)
+    }
+    def _2: Rep[B] = {
+        implicit def sc = (new SourceContext{})
+        tuple3_get2(lhs)
+    }
+    def _3: Rep[C] = {
+        implicit def sc = (new SourceContext{})
+        tuple3_get3(lhs)
+    }
+  }
+ implicit class Tuple4Ops[A:Manifest,B:Manifest,C:Manifest,D:Manifest](lhs: Rep[(A, B, C, D)]) {
+    def _1: Rep[A] = {
+        implicit def sc = (new SourceContext{})
+        tuple4_get1(lhs)
+    }
+    def _2: Rep[B] = {
+        implicit def sc = (new SourceContext{})
+        tuple4_get2(lhs)
+    }
+    def _3: Rep[C] = {
+        implicit def sc = (new SourceContext{})
+        tuple4_get3(lhs)
+    }
+    def _4: Rep[D] = {
+        implicit def sc = (new SourceContext{})
+        tuple4_get4(lhs)
+    }
+
+  }
 
  def make_tuple2[A:Manifest,B:Manifest](t1: Rep[A], t2: Rep[B])(implicit pos: SourceContext) : Rep[(A,B)]
   object Tuple2 {
     def apply[A: Manifest, B: Manifest](_1: Rep[A], _2: Rep[B]) = {
       implicit def sc = (new SourceContext{})
       make_tuple2(_1, _2)
+    }
+  }
+  def make_tuple3[A:Manifest,B:Manifest,C:Manifest](_1: Rep[A], _2: Rep[B], _3: Rep[C])(implicit pos: SourceContext) : Rep[(A,B,C)]
+  object Tuple3 {
+    def apply[A:Manifest,B:Manifest,C:Manifest](_1: Rep[A], _2: Rep[B], _3: Rep[C]) = {
+      implicit def sc = (new SourceContext{})
+      make_tuple3(_1, _2, _3)
+    }
+  }
+  def make_tuple4[A:Manifest,B:Manifest,C:Manifest,D:Manifest](_1: Rep[A], _2: Rep[B], _3: Rep[C], _4: Rep[D])(implicit pos: SourceContext) : Rep[(A,B,C,D)]
+  object Tuple4 {
+    def apply[A:Manifest,B:Manifest,C:Manifest,D:Manifest](_1: Rep[A], _2: Rep[B], _3: Rep[C], _4: Rep[D]) = {
+      implicit def sc = (new SourceContext{})
+      make_tuple4(_1, _2, _3, _4)
     }
   }
 
@@ -46,6 +93,10 @@ trait TupleOps extends Base {
 
 trait TupleOpsExp extends TupleOps with StructExpOpt {
   def make_tuple2[A:Manifest,B:Manifest](t1: Rep[A], t2: Rep[B])(implicit pos: SourceContext) : Rep[(A,B)] = struct(classTag[(A,B)], "_1" -> t1, "_2" -> t2)
+  def make_tuple3[A:Manifest,B:Manifest,C:Manifest](_1: Rep[A], _2: Rep[B], _3: Rep[C])(implicit pos: SourceContext) : Rep[(A,B,C)] = struct(classTag[(A,B,C)], "_1" -> _1, "_2" -> _2, "_3" -> _3)
+  def make_tuple4[A:Manifest,B:Manifest,C:Manifest,D:Manifest](_1: Rep[A], _2: Rep[B], _3: Rep[C], _4: Rep[D])(implicit pos: SourceContext) : Rep[(A,B,C,D)] = struct(classTag[(A,B,C,D)], "_1" -> _1, "_2" -> _2, "_3" -> _3, "_4" -> _4)
+
+
   def tuple2_get1[A:Manifest](t: Exp[(A,_)])(implicit pos: SourceContext) = field[A](t, "_1")
   def tuple2_get2[B:Manifest](t: Exp[(_,B)])(implicit pos: SourceContext) = field[B](t, "_2")
 
@@ -71,10 +122,7 @@ trait TupleGenBase extends GenericCodegen with BaseGenStruct {
   val IR: TupleOpsExp
 
   override def remap[A](m: Manifest[A]) = m.erasure.getSimpleName match {
-    case "Tuple2" => IR.structName(m)
-    case "Tuple3" => IR.structName(m)
-    case "Tuple4" => IR.structName(m)
-    case "Tuple5" => IR.structName(m)
+
     case _ => super.remap(m)
   }
 }

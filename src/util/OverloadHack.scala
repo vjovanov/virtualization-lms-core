@@ -1,5 +1,5 @@
-package scala.virtualization.lms
-package util
+package scala.virtualization.lms.util
+
 
 // hack to appease erasure
 
@@ -26,7 +26,7 @@ trait OverloadHack {
   class Overloaded20
   class Overloaded21
   class Overloaded22
-  class Overloaded23  
+  class Overloaded23
   class Overloaded24
   class Overloaded25
   class Overloaded26
@@ -50,7 +50,7 @@ trait OverloadHack {
   class Overloaded44
   class Overloaded45
   class Overloaded46
-  class Overloaded47  
+  class Overloaded47
   class Overloaded48
   class Overloaded49
   class Overloaded50
@@ -76,7 +76,7 @@ trait OverloadHack {
   class Overloaded70
   class Overloaded71
   class Overloaded72
-  class Overloaded73  
+  class Overloaded73
   class Overloaded74
   class Overloaded75
   class Overloaded76
@@ -100,11 +100,11 @@ trait OverloadHack {
   class Overloaded94
   class Overloaded95
   class Overloaded96
-  class Overloaded97  
+  class Overloaded97
   class Overloaded98
   class Overloaded99
   class Overloaded100
-  
+
   implicit val overloaded1 = new Overloaded1
   implicit val overloaded2 = new Overloaded2
   implicit val overloaded3 = new Overloaded3
@@ -123,10 +123,10 @@ trait OverloadHack {
   implicit val overloaded16 = new Overloaded16
   implicit val overloaded17 = new Overloaded17
   implicit val overloaded18 = new Overloaded18
-  implicit val overloaded19 = new Overloaded19  
+  implicit val overloaded19 = new Overloaded19
   implicit val overloaded20 = new Overloaded20
-  implicit val overloaded21 = new Overloaded21  
-  implicit val overloaded22 = new Overloaded22  
+  implicit val overloaded21 = new Overloaded21
+  implicit val overloaded22 = new Overloaded22
   implicit val overloaded23 = new Overloaded23
   implicit val overloaded24 = new Overloaded24
   implicit val overloaded25 = new Overloaded25
@@ -147,14 +147,14 @@ trait OverloadHack {
   implicit val overloaded40 = new Overloaded40
   implicit val overloaded41 = new Overloaded41
   implicit val overloaded42 = new Overloaded42
-  implicit val overloaded43 = new Overloaded43  
+  implicit val overloaded43 = new Overloaded43
   implicit val overloaded44 = new Overloaded44
-  implicit val overloaded45 = new Overloaded45  
-  implicit val overloaded46 = new Overloaded46  
+  implicit val overloaded45 = new Overloaded45
+  implicit val overloaded46 = new Overloaded46
   implicit val overloaded47 = new Overloaded47
   implicit val overloaded48 = new Overloaded48
   implicit val overloaded49 = new Overloaded49
-  implicit val overloaded50 = new Overloaded50  
+  implicit val overloaded50 = new Overloaded50
   implicit val overloaded51 = new Overloaded51
   implicit val overloaded52 = new Overloaded52
   implicit val overloaded53 = new Overloaded53
@@ -173,10 +173,10 @@ trait OverloadHack {
   implicit val overloaded66 = new Overloaded66
   implicit val overloaded67 = new Overloaded67
   implicit val overloaded68 = new Overloaded68
-  implicit val overloaded69 = new Overloaded69  
+  implicit val overloaded69 = new Overloaded69
   implicit val overloaded70 = new Overloaded70
-  implicit val overloaded71 = new Overloaded71  
-  implicit val overloaded72 = new Overloaded72  
+  implicit val overloaded71 = new Overloaded71
+  implicit val overloaded72 = new Overloaded72
   implicit val overloaded73 = new Overloaded73
   implicit val overloaded74 = new Overloaded74
   implicit val overloaded75 = new Overloaded75
@@ -197,13 +197,13 @@ trait OverloadHack {
   implicit val overloaded90 = new Overloaded90
   implicit val overloaded91 = new Overloaded91
   implicit val overloaded92 = new Overloaded92
-  implicit val overloaded93 = new Overloaded93  
+  implicit val overloaded93 = new Overloaded93
   implicit val overloaded94 = new Overloaded94
-  implicit val overloaded95 = new Overloaded95  
-  implicit val overloaded96 = new Overloaded96  
+  implicit val overloaded95 = new Overloaded95
+  implicit val overloaded96 = new Overloaded96
   implicit val overloaded97 = new Overloaded97
   implicit val overloaded98 = new Overloaded98
   implicit val overloaded99 = new Overloaded99
-  implicit val overloaded100 = new Overloaded100  
-  
+  implicit val overloaded100 = new Overloaded100
+
 }

@@ -22,7 +22,7 @@ trait LiftPrimitives {
  * Scala's type hierarchy to reduce the amount of IR nodes or code generation require.
  * It is in semi-desperate need of a refactor.
  */
-trait PrimitiveOps extends Variables with OverloadHack {
+trait PrimitiveOps extends Variables with OverloadHack with BooleanOps {
   this: ImplicitOps =>
 
   /**
@@ -40,6 +40,7 @@ trait PrimitiveOps extends Variables with OverloadHack {
     def +(rhs: Rep[Int])(implicit o: Overloaded15): Rep[Int] = int_plus(lhs, rhs)(new SourceContext {})
     def +(rhs: Rep[Float])(implicit o: Overloaded16): Rep[Float] = float_plus(repIntToRepFloat(lhs)(new SourceContext {}), rhs)(new SourceContext {})
     def +(rhs: Rep[Double])(implicit o: Overloaded17): Rep[Double] = double_plus(repIntToRepDouble(lhs)(new SourceContext {}), rhs)(new SourceContext {})
+    def >(rhs: Rep[Int])(implicit o: Overloaded14): Rep[Boolean] = int_gt(lhs, rhs)(new SourceContext {})
   }
 
   implicit class FloatOps(lhs: Rep[Float]) {
@@ -50,6 +51,7 @@ trait PrimitiveOps extends Variables with OverloadHack {
     def toDouble(implicit ctx: SourceContext): Rep[Double] = repFloatToRepDouble(lhs)
   }
 
+  def int_gt(lhs: Rep[Int], rhs: Rep[Int])(implicit pos: SourceContext): Rep[Boolean]
   /*
   def -(rhs: Rep[Double])(implicit o: Overloaded6, ctx: SourceContext): Rep[Double] = double_minus(repFloatToRepDouble(lhs), rhs)
   def -(rhs: Rep[Int])(implicit o: Overloaded7, ctx: SourceContext): Rep[Double] = double_minus(lhs,repIntToRepDouble(rhs))
@@ -327,6 +329,7 @@ trait PrimitiveOpsExp extends PrimitiveOps with EffectExp {
   case class IntToLong(lhs: Exp[Int]) extends Def[Long]
   case class IntToFloat(lhs: Exp[Int]) extends Def[Float]
   case class IntToDouble(lhs: Exp[Int]) extends Def[Double]
+  case class IntGT(lhs: Exp[Int], rhs: Exp[Int]) extends Def[Boolean]
 
   def obj_integer_parse_int(s: Rep[String])(implicit pos: SourceContext) = ObjIntegerParseInt(s)
   def obj_int_max_value(implicit pos: SourceContext) = ObjIntMaxValue()
@@ -337,6 +340,10 @@ trait PrimitiveOpsExp extends PrimitiveOps with EffectExp {
     case (Const(x), Const(y)) => Const(x + y)
     case _ => IntPlus(lhs, rhs)
   }
+
+  def int_gt(lhs: Exp[Int], rhs: Exp[Int])(implicit pos: SourceContext): Exp[Boolean] =  IntGT(lhs, rhs)
+
+
   def int_minus(lhs: Exp[Int], rhs: Exp[Int])(implicit pos: SourceContext): Exp[Int] = (lhs, rhs) match {
     case (l, Const(0)) => l
     case (Const(x), Const(y)) => Const(x - y)
@@ -431,6 +438,7 @@ trait PrimitiveOpsExp extends PrimitiveOps with EffectExp {
       case LongBinaryAnd(x, y) => long_binaryand(f(x), f(y))
       case LongToInt(x) => long_toint(f(x))
       case LongShiftRightUnsigned(x, y) => long_shiftright_unsigned(f(x), f(y))
+      case IntGT(lhs, rhs) => int_gt(lhs, rhs)
 
       case Reflect(ObjDoubleParseDouble(x), u, es) => reflectMirrored(Reflect(ObjDoubleParseDouble(f(x)), mapOver(f, u), f(es)))(mtype(manifest[A]))
       case Reflect(ObjDoublePositiveInfinity(), u, es) => reflectMirrored(Reflect(ObjDoublePositiveInfinity(), mapOver(f, u), f(es)))(mtype(manifest[A]))
@@ -575,6 +583,7 @@ trait ScalaGenPrimitiveOps extends ScalaGenBase {
     case LongShiftLeft(lhs, rhs) => emitValDef(sym, quote(lhs) + " << " + quote(rhs))
     case LongShiftRightUnsigned(lhs, rhs) => emitValDef(sym, quote(lhs) + " >>> " + quote(rhs))
     case LongToInt(lhs) => emitValDef(sym, quote(lhs) + ".toInt")
+    case IntGT(lhs, rhs) => emitValDef(sym, quote(lhs) + ">" + quote(rhs))
     case _ => super.emitNode(sym, rhs)
   }
 }

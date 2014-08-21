@@ -5,7 +5,7 @@ import java.io.PrintWriter
 import scala.virtualization.lms.internal.{ GenericNestedCodegen, GenericFatCodegen, GenerationFailedException }
 
 trait IfThenElse extends Base {
-  def __ifThenElse[T: Manifest](cond: Rep[Boolean], thenp: => Rep[T], elsep: => Rep[T])(implicit pos: SourceContext): Rep[T]
+  def __ifThenElse[T: Manifest](cond: Rep[Boolean], thenp: => Rep[T], elsep: => Rep[T]): Rep[T]
 
 }
 
@@ -16,7 +16,10 @@ trait IfThenElsePureExp extends IfThenElse with BaseExp {
 
   case class IfThenElse[T: Manifest](cond: Exp[Boolean], thenp: Exp[T], elsep: Exp[T]) extends Def[T]
 
-  def __ifThenElse[T: Manifest](cond: Rep[Boolean], thenp: => Rep[T], elsep: => Rep[T])(implicit pos: SourceContext) = IfThenElse(cond, thenp, elsep)
+  def __ifThenElse[T: Manifest](cond: Rep[Boolean], thenp: => Rep[T], elsep: => Rep[T]) = {
+      implicit val sc: SourceContext = new SourceContext{}
+      IfThenElse(cond, thenp, elsep)
+  }
 }
 
 trait IfThenElseExp extends IfThenElse with EffectExp {
@@ -29,7 +32,9 @@ trait IfThenElseExp extends IfThenElse with EffectExp {
 
   case class IfThenElse[T: Manifest](cond: Exp[Boolean], thenp: Block[T], elsep: Block[T]) extends AbstractIfThenElse[T]
 
-  override def __ifThenElse[T: Manifest](cond: Rep[Boolean], thenp: => Rep[T], elsep: => Rep[T])(implicit pos: SourceContext): Rep[T] = {
+  override def __ifThenElse[T: Manifest](cond: Rep[Boolean], thenp: => Rep[T], elsep: => Rep[T]): Rep[T] = {
+
+      implicit val sc: SourceContext = new SourceContext{}
     val a = reifyEffectsHere(thenp)
     val b = reifyEffectsHere(elsep)
 
@@ -178,7 +183,7 @@ trait IfThenElseExpOpt extends IfThenElseExp { this: BooleanOpsExp with EqualExp
   // 'de-reify' blocks in case we rewrite if(true) to thenp.
   // TODO: make reflect(Reify(..)) do the right thing
 
-  override def __ifThenElse[T: Manifest](cond: Rep[Boolean], thenp: => Rep[T], elsep: => Rep[T])(implicit pos: SourceContext) = cond match {
+  override def __ifThenElse[T: Manifest](cond: Rep[Boolean], thenp: => Rep[T], elsep: => Rep[T]) = cond match {
     case Const(true) => thenp
     case Const(false) => elsep
     case Def(BooleanNegate(a)) => __ifThenElse(a, elsep, thenp)

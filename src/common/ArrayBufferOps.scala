@@ -15,9 +15,18 @@ trait ArrayBufferOps extends Base {
   implicit def repToArrayBufferOps[A: Manifest](l: Rep[ArrayBuffer[A]]) = new ArrayBufferOpsCls(l)
 
   class ArrayBufferOpsCls[A: Manifest](l: Rep[ArrayBuffer[A]]) {
-    def +=(e: Rep[A])(implicit pos: SourceContext) = arraybuffer_append(l, e)
-    def ++=(e: Rep[Seq[A]])(implicit pos: SourceContext) = arraybuffer_appendSeq(l, e)
-    def foreach(block: Rep[A] => Rep[Unit])(implicit pos: SourceContext): Rep[Unit] = arraybuffer_foreach(l, block)
+    def +=(e: Rep[A])= {
+      implicit val sc: SourceContext = new SourceContext{}
+      arraybuffer_append(l, e)
+    }
+    def ++=(e: Rep[Seq[A]]) = {
+      implicit val sc: SourceContext = new SourceContext{}
+      arraybuffer_appendSeq(l, e)
+    }
+    def foreach(block: Rep[A] => Rep[Unit]): Rep[Unit] = {
+      implicit val sc: SourceContext = new SourceContext{}
+      arraybuffer_foreach(l, block)
+    }
     def mkString(sep: Rep[String] = unit(""))(implicit pos: SourceContext) = arraybuffer_mkstring(l, sep)
     def append(l: Rep[ArrayBuffer[A]], e: Rep[A])(implicit pos: SourceContext) = arraybuffer_append(l, e)
     def clear()(implicit pos: SourceContext) = arraybuffer_clear(l)
@@ -81,13 +90,13 @@ trait ArrayBufferOpsExp extends ArrayBufferOps with EffectExp {
     case _ => super.symsFreq(e)
   }
 
-  /*
+
   override def mirror[A:Manifest](e: Def[A], f: Transformer)(implicit pos: SourceContext): Exp[A] = (e match {
-    case Reflect(ArrayBufferMkString(l,r), u, es) => reflectMirrored(Reflect(ArrayBufferMkString(f(l),f(r)), mapOver(f,u), f(es)))(mtype(manifest[A]))
-    case Reflect(ArrayBufferAppend(l,r), u, es) => reflectMirrored(Reflect(ArrayBufferAppend(f(l),f(r)), mapOver(f,u), f(es)))(mtype(manifest[A]))
+    case Reflect(e@ArrayBufferNew(List()), u, es) => reflectMirrored(Reflect(ArrayBufferNew(List())(e.mA), mapOver(f,u), f(es)))(mtype(manifest[A]))
+    case ab@ArrayBufferNew(List()) => ArrayBufferNew(List())(ab.mA)
     case _ => super.mirror(e,f)
   }).asInstanceOf[Exp[A]] // why??
-*/
+
 }
 
 trait BaseGenArrayBufferOps extends GenericNestedCodegen {

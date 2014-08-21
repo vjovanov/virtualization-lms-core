@@ -82,7 +82,7 @@ trait ForwardTransformer extends internal.AbstractSubstTransformer with internal
       mirror(rhs, self.asInstanceOf[Transformer])(mtype(sym.tp),mpos(sym.pos)) // cast needed why?
     } catch { //hack -- should not catch errors
       case e if e.toString contains "don't know how to mirror" =>
-        printerr("error: " + e.getMessage)
+        // printerr("error: " + e.getMessage)
       sym
       case e: Throwable =>
         printerr("error: exception during mirroring of "+rhs+": "+ e)
