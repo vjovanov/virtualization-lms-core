@@ -11,11 +11,12 @@ trait LiftAll extends Base {
   protected implicit def __unit[T:Manifest](x: T) = unit(x)
 }
 
+
 /**
  * The Base trait defines the type constructor Rep, which is the higher-kinded type that allows for other DSL types to be
  * polymorphically embedded.
  *
- * @since 0.1 
+ * @since 0.1
  */
 trait Base extends EmbeddedControls {
   type API <: Base
@@ -61,7 +62,7 @@ trait EffectExp extends BaseExp with Effects {
     case Reify(x, u, es) => Reify(f(x), mapOver(f,u), f(es))
     case _ => super.mirror(e,f)
   }
-    
+
 }
 
 trait BaseFatExp extends BaseExp with FatExpressions with FatTransforming
