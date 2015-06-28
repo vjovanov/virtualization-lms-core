@@ -9,7 +9,7 @@ import scala.reflect.SourceContext
 trait DynamicBase extends Base {
   type Dyn[+T] = Both[T]
 
-  case class Both[+T](static: T , dynamic: Rep[T]) extends Dynamic {
+  case class Both[+T](static: T , dynamic: Rep[T]){
     /**
      * Redirect the invocation to both values at the same time producing new both on the way.
      * @return if all arguments are not Dyn[T] or T reduce back to Rep[T].
@@ -17,8 +17,9 @@ trait DynamicBase extends Base {
     def applyDynamic(name: String)(args: Any*): Any = macro DynamicMacro.applyDynamicMacro
   }
 
+  // TODO decide what should be the constant!
   def lift[T: Manifest](v: T): Dyn[T] = Both(v, dunit(v)(manifest[T]))
-  implicit def toDyn[T: Manifest](v: T): Dyn[T] = Both(v, dunit(v))
+  def unlift[T](v: Dyn[T]): T = v.static
   protected def dunit[T:Manifest](x: T): Rep[T]
 
 }

@@ -123,35 +123,43 @@ class TestDynamicCompilation extends FileDiffSuite {
 
   // boilerplate definitions for DSL interface
 
-  trait DSL extends LiftNumeric with NumericOps with PrimitiveOps with ArrayOps with RangeOps with BooleanOps
+  trait DSL extends LiftNumeric with NumericOps with PrimitiveOps with ArrayOps with BooleanOps
     with LiftVariables with DynIfThenElse with Print with DynamicBase with DynMatrixOps with OrderingOps {
     def staticData[T:Manifest](x: T): Rep[T]
     def test(): Rep[test15.Matrix]
   }
 
   trait Impl extends DSL with Runner with ArrayOpsExpOpt with NumericOpsExpOpt with PrimitiveOpsExp with OrderingOpsExpOpt with BooleanOpsExp
-      with EqualExpOpt with VariablesExpOpt with RangeOpsExp with StaticDataExp with BooleanOpsExpOpt
+      with EqualExpOpt with VariablesExpOpt with StaticDataExp with BooleanOpsExpOpt
       with IfThenElseExpOpt with PrintExp with DynamicExp with DynMatrixOpsExp
       with DynCompile { self =>
     //override val verbosity = 1
-    val codegen = new ScalaGenNumericOps with ScalaGenPrimitiveOps with ScalaGenStaticData with ScalaGenOrderingOps with ScalaGenArrayOps with ScalaGenRangeOps
+    val codegen = new ScalaGenNumericOps with ScalaGenPrimitiveOps with ScalaGenStaticData with ScalaGenOrderingOps with ScalaGenArrayOps
       with ScalaGenVariables with ScalaGenIfThenElse with ScalaGenBooleanOps with GenDynMatrixOps
       with ScalaGenPrint with DynamicGen /*with LivenessOpt*/ { val IR: self.type = self }
 
     val then = test()
     val guard = decisions.foldLeft(dunit(true): Exp[Boolean])((guard, dec) => boolean_and(guard, dec))
+    println("Guards:")
     println(guard)
+    // TODO put a transformer
     val res = if(guard) then else then
     codegen.emitSource(Nil, codegen.reifyBlock(res)(manifest[test15.Matrix]), "Test", new PrintWriter(System.out))(manifest[test15.Matrix])
+    println("Decisions:")
+    decisions.foreach(println)
     run()
   }
 
   /*
    * This is introduced as primitives can not be caught by the dynamic macro.
    */
-  trait DynArith extends DynamicBase with PrimitiveOps with BooleanOps with DynIfThenElse with Equal {
-    def infix_+(lhs: Dyn[Int], rhs: Dyn[Int]): Dyn[Int] =
-      Both(lhs.static + rhs.static, lhs.dynamic + rhs.dynamic)
+  trait DynArith extends DynamicBase with PrimitiveOps with BooleanOps with DynIfThenElse with Equal with OrderingOps {
+    def infix_+(lhs: Dyn[Int], rhs: Dyn[Int]): Dyn[Int] = {
+      Both(
+        lhs.static + rhs.static,
+        lhs.dynamic + rhs.dynamic
+      )
+      }
 
     def infix_*(lhs: Dyn[Int], rhs: Dyn[Int]): Dyn[Int] =
       Both(lhs.static * rhs.static, lhs.dynamic * rhs.dynamic)
@@ -161,6 +169,9 @@ class TestDynamicCompilation extends FileDiffSuite {
 
     def infix_unary_!(x: Dyn[Boolean]): Dyn[Boolean] =
       Both(!x.static, !x.dynamic)
+
+    def infix_<(lhs: Dyn[Int], rhs: Dyn[Int]): Dyn[Boolean] =
+      Both(lhs.static < rhs.static, lhs.dynamic < rhs.dynamic)
 
     def infix_&&(lhs: Dyn[Boolean], rhs: Dyn[Boolean]): Dyn[Boolean] =
       Both(lhs.static && rhs.static, lhs.dynamic && rhs.dynamic)
@@ -237,12 +248,48 @@ class TestDynamicCompilation extends FileDiffSuite {
   }
 
   trait GenDynMatrixOps extends GenericCodegen {
-    val IR: DynMatrixOpsExp with Expressions
+    val IR: DynMatrixOpsExp with Expressions with Impl
     import IR._
+
+    class MatrixOrderOptimization(p: Array[Dyn[Int]]) {
+      val n: Int = p.length - 1
+      val m: scala.Array[scala.Array[Dyn[Int]]] = scala.Array.fill[Dyn[Int]](n, n)(lift(0))
+      val s: scala.Array[scala.Array[Dyn[Int]]] = scala.Array.ofDim[Dyn[Int]](n, n)
+
+      for (ii: Int <- 1 until n; i: Int <- 0 until n - ii) {
+        val j: Int = i + ii
+        m.apply(i).update(j, lift(scala.Int.MaxValue)) // TODO remove ArrayOps
+        for (k <- i until j) {
+          val q: Dyn[Int] = m(i)(k) + m(k + 1)(j) + p(i) * p(k + 1) * p(j + 1)
+          if (q < m(i)(j)) {
+            m(i)(j) = q
+            s(i)(j) = lift(k)
+          }
+        }
+      }
+
+      def optimalChain(m: Array[IR.Matrix]): IR.Matrix = {
+        def optimalChain0(i: Int, j: Int): IR.Matrix =
+          if (i != j) optimalChain0(i, unlift(s(i)(j)))  *  optimalChain0(unlift((s(i)(j) + lift(1))), j)
+          else m(i)
+
+        optimalChain0(0, s.length-1)
+      }
+    }
+
 
     override def emitNode(sym: Sym[Any], rhs: Def[Any]) = rhs match {
       case MatrixCarrier(matrices) => // generate multiplication
-        stream.print("\"" + matrices.toString + "\"")
+        def extractChain(m: IR.Matrix): List[NewMatrix] = m match {
+          case x: NewMatrix => x :: Nil
+          case MatrixMult(m1, m2) => extractChain(m1) ::: extractChain(m2)
+        }
+        val originalChain = extractChain(matrices)
+        val sizes: List[Dyn[Int]] = originalChain.tail
+          .foldLeft(scala.List(originalChain.head.m, originalChain.head.n))((agg, m) => agg :+ m.n)
+        val optimizer = new MatrixOrderOptimization(sizes.toArray)
+        val optimalChain =  optimizer.optimalChain(originalChain.toArray)
+
       case _ => super.emitNode(sym, rhs)
     }
   }
@@ -280,20 +327,6 @@ class TestDynamicCompilation extends FileDiffSuite {
       }
       new Prog with Impl
     }
+
   }
 }
-
-
-
-
-// We should get:
-// def mult(m1: Matrix, m2: Matrix, m3: Matrix): Matrix = dsl {
-//   if (guards && guards) {
-//     cache.get("dsfklajfldsk")(lift(m1),lift(m2),lift(m3))
-//   } else {
-//     cache.update(recompile(m1,m2,m3)) // we can get this from YY
-//   }
-// }
-//
-//
-//
