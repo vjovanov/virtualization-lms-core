@@ -13,7 +13,7 @@ import scala.reflect.SourceContext
 
 import java.io.{PrintWriter,StringWriter,FileOutputStream}
 import scala.reflect.SourceContext
-
+import scala.collection.mutable
 
 import java.io._
 
@@ -24,9 +24,9 @@ import scala.tools.nsc.io._
 
 import scala.tools.nsc.interpreter.AbstractFileClassLoader
 
-trait Compile0 extends Base {
+trait Compile0 extends BaseExp {
 
-  def compile[B](f: ()=> Rep[B])(mB: Manifest[B]): ()=>B
+  def compile[B, Ret](syms: List[Sym[_]], f: => Rep[B])(mB: Manifest[B]): Ret
 
 }
 
@@ -68,7 +68,7 @@ trait DynCompile extends Expressions with DynamicBase {
 
   var dumpGeneratedCode = false
 
-  def compile[B](f: () => Exp[B])(mB: Manifest[B]): ()=>B = {
+  def compile[B, Ret](syms: List[Sym[_]], f: => Exp[B])(mB: Manifest[B]): Ret = {
     if (this.compiler eq null)
       setupCompiler()
 
@@ -76,7 +76,7 @@ trait DynCompile extends Expressions with DynamicBase {
     compileCount += 1
 
     val source = new StringWriter()
-    val staticData = codegen.emitSource(Nil, codegen.reifyBlock(f())(mB), className, new PrintWriter(source))(mB)
+    val staticData = codegen.emitSource(syms, codegen.reifyBlock(f)(mB), className, new PrintWriter(source))(mB)
     codegen.emitDataStructures(new PrintWriter(source))
 
     if (dumpGeneratedCode) println(source)
@@ -105,7 +105,7 @@ trait DynCompile extends Expressions with DynamicBase {
     val cls: Class[_] = loader.loadClass(className)
     val cons = cls.getConstructor(staticData.map(_._1.tp.erasure):_*)
 
-    val obj: ()=>B = cons.newInstance(staticData.map(_._2.asInstanceOf[AnyRef]):_*).asInstanceOf[()=>B]
+    val obj: Ret = cons.newInstance(staticData.map(_._2.asInstanceOf[AnyRef]):_*).asInstanceOf[Ret]
     obj
   }
 }
@@ -124,9 +124,9 @@ class TestDynamicCompilation extends FileDiffSuite {
   // boilerplate definitions for DSL interface
 
   trait DSL extends LiftNumeric with NumericOps with PrimitiveOps with ArrayOps with BooleanOps
-    with LiftVariables with DynIfThenElse with Print with DynamicBase with DynMatrixOps with OrderingOps {
+    with LiftVariables with DynIfThenElse with Print with DynamicBase with DynMatrixOps with OrderingOps with DynArith {
     def staticData[T:Manifest](x: T): Rep[T]
-    def test(): Rep[test15.Matrix]
+    def test(): Rep[Int]
   }
 
   trait Impl extends DSL with Runner with ArrayOpsExpOpt with NumericOpsExpOpt with PrimitiveOpsExp with OrderingOpsExpOpt with BooleanOpsExp
@@ -134,32 +134,96 @@ class TestDynamicCompilation extends FileDiffSuite {
       with IfThenElseExpOpt with PrintExp with DynamicExp with DynMatrixOpsExp
       with DynCompile { self =>
     //override val verbosity = 1
-    val codegen = new ScalaGenNumericOps with ScalaGenPrimitiveOps with ScalaGenStaticData with ScalaGenOrderingOps with ScalaGenArrayOps
+    val UID: Long
+    lazy val codegen = new ScalaGenNumericOps with ScalaGenPrimitiveOps with ScalaGenStaticData with ScalaGenOrderingOps with ScalaGenArrayOps
       with ScalaGenVariables with ScalaGenIfThenElse with ScalaGenBooleanOps with GenDynMatrixOps
       with ScalaGenPrint with DynamicGen /*with LivenessOpt*/ { val IR: self.type = self }
 
-    val then = test()
-    val guard = decisions.foldLeft(dunit(true): Exp[Boolean])((guard, dec) => boolean_and(guard, dec))
-    println("Guards:")
-    println(guard)
-    // TODO put a transformer
-    val res = if(guard) then else then
-    codegen.emitSource(Nil, codegen.reifyBlock(res)(manifest[test15.Matrix]), "Test", new PrintWriter(System.out))(manifest[test15.Matrix])
-    println("Decisions:")
-    decisions.foreach(println)
-    run()
+    lazy val guardCodegen = new ScalaGenNumericOps with ScalaGenPrimitiveOps with ScalaGenStaticData with ScalaGenOrderingOps with ScalaGenArrayOps
+      with ScalaGenVariables with ScalaGenIfThenElse with ScalaGenBooleanOps with GenDynMatrixOps
+      with ScalaGenPrint with DynamicGen /*with LivenessOpt*/ { val IR: self.type = self }
+
+   def apply(v: Int): Int = {
+    def constructGuards[T: Manifest]: Rep[T] = {
+      def constructGuards0(current: Node, decisions: List[Boolean], taken: Boolean): Rep[T] = current match {
+        case Leaf if taken => // call function
+          emitLookup(orderedHoles, decisions.reverse)
+        case Leaf if !taken => // recompile
+          emitRecompile(orderedHoles, decisions.reverse)
+
+        case DecisionNode(cond, tree, semanticPreserving, (left, takenLeft), (right, takenRight)) =>
+          println("Taken: (" + takenLeft + ", " + takenRight + ")")
+          val thn = constructGuards0(right, true :: decisions, takenRight)
+          val els = constructGuards0(left, false :: decisions, takenLeft)
+
+          if (tree) thn else els
+      }
+
+      constructGuards0(root, Nil, true)
+    }
+
+    def decisions[T: Manifest]: List[Boolean] = {
+      def decisions0(current: Node, decisions: List[Boolean]): List[Boolean] = current match {
+        case Leaf => decisions
+
+        case DecisionNode(cond, tree, semanticPreserving, (left, _), (right, _)) =>
+          if (cond) decisions0(right, cond :: decisions) else decisions0(left, !cond :: decisions)
+      }
+
+      decisions0(root, Nil)
+    }
+
+
+    if (CodeCache.guard.contains(UID)) {
+      val (_, guard: (Int => Int), _) = CodeCache.guard(UID)
+      guard(v)
+    } else {
+      // define recompile
+      def recompile(hole: Int): Int => Int = {
+        // reset() // TODO here the decisions need to be kept
+        holes.clear()
+        currentNode = None
+        if (CodeCache.guard.contains(UID)) {
+          val (_, _, decisions) = CodeCache.guard(UID)
+          root = decisions
+          println("Decisions: " + CodeCache.guard(UID)._3)
+          currentNode = None
+        }
+        val code = test()
+        val guards = constructGuards[Int]
+        val decs = decisions[Int].reverse
+        // TODO for testing purposes
+        println("Guard:")
+        guardCodegen.emitSource(orderedHoles, codegen.reifyBlock(guards)(manifest[Int]), "Test", new PrintWriter(System.out))(manifest[Int])
+        println("Code:")
+        codegen.emitSource(orderedHoles, codegen.reifyBlock(code)(manifest[Int]), "Test", new PrintWriter(System.out))(manifest[Int])
+
+        val guardFunction = compile[Int, Int => Int](orderedHoles, guards)(manifest[Int])
+        val function = compile[Int, Int => Int](orderedHoles, code)(manifest[Int])
+
+        CodeCache.code  += ((UID, decs)-> function)
+        CodeCache.guard += (UID -> (recompile _, guardFunction, root))
+        function
+      }
+      // TODO pass the values
+      recompile(1)(1)
+    }
+    }
+
+    override def reset() = {
+      super.reset
+      root = Leaf // TODO this needs to be kept
+      holes.clear()
+      currentNode = None
+    }
   }
 
   /*
    * This is introduced as primitives can not be caught by the dynamic macro.
    */
   trait DynArith extends DynamicBase with PrimitiveOps with BooleanOps with DynIfThenElse with Equal with OrderingOps {
-    def infix_+(lhs: Dyn[Int], rhs: Dyn[Int]): Dyn[Int] = {
-      Both(
-        lhs.static + rhs.static,
-        lhs.dynamic + rhs.dynamic
-      )
-      }
+    def infix_+(lhs: Dyn[Int], rhs: Dyn[Int]): Dyn[Int] =
+      Both(lhs.static + rhs.static, lhs.dynamic + rhs.dynamic)
 
     def infix_*(lhs: Dyn[Int], rhs: Dyn[Int]): Dyn[Int] =
       Both(lhs.static * rhs.static, lhs.dynamic * rhs.dynamic)
@@ -172,6 +236,9 @@ class TestDynamicCompilation extends FileDiffSuite {
 
     def infix_<(lhs: Dyn[Int], rhs: Dyn[Int]): Dyn[Boolean] =
       Both(lhs.static < rhs.static, lhs.dynamic < rhs.dynamic)
+
+    def infix_>(lhs: Dyn[Int], rhs: Dyn[Int]): Dyn[Boolean] =
+      Both(lhs.static > rhs.static, lhs.dynamic > rhs.dynamic)
 
     def infix_&&(lhs: Dyn[Boolean], rhs: Dyn[Boolean]): Dyn[Boolean] =
       Both(lhs.static && rhs.static, lhs.dynamic && rhs.dynamic)
@@ -296,19 +363,40 @@ class TestDynamicCompilation extends FileDiffSuite {
 
   // test case input data
   trait Runner extends Compile0 with DynamicBase {
-    def test(): Rep[test15.Matrix]
-    def run() {
-      val f = compile(test)(manifest[Matrix])
-      val v1 = f()
-      println(v1)
-    }
+    def test(): Rep[Int]
   }
 
 
   // staged program implementations
   val prefix = home + "test-out/epfl/test15-"
 
-  def testDynamic = {
+  def testBasicIf = {
+    var x = 1
+    withOutFileChecked(prefix+"dynamic-basic") {
+      trait Prog extends DSL {
+        def test(): Rep[Int] = {
+          if (hole[Int](x, 1) < lift(20))
+            if (hole[Int](x, 1) < lift(10)) 0 else 1
+          else 2
+        }
+      }
+
+      println((new {val UID = 5551L} with Prog with Impl)(x))
+      x = 11
+      println((new {val UID = 5551L} with Prog with Impl)(x))
+      x = 20
+      println((new {val UID = 5551L} with Prog with Impl)(x))
+      x = 1
+      println((new {val UID = 5551L} with Prog with Impl)(x))
+      x = 11
+      println((new {val UID = 5551L} with Prog with Impl)(x))
+      // x = 20
+      // println((new {val UID = 5551L} with Prog with Impl)(x))
+    }
+
+  }
+
+  /*def testDynamic = {
     withOutFileChecked(prefix+"dynamic-basic") {
       trait Prog extends DSL {
         def test(): Rep[test15.Matrix] = {
@@ -328,5 +416,5 @@ class TestDynamicCompilation extends FileDiffSuite {
       new Prog with Impl
     }
 
-  }
+  }*/
 }
