@@ -84,41 +84,54 @@ trait DynamicGen extends internal.GenericCodegen {
 
 trait DynIfThenElse extends DynamicBase with IfThenElse {
   trait Node
-  case class DecisionNode(var cond: Boolean, tree: Rep[Boolean], semanticPreserving: Boolean, var left: (Node, Boolean), var right: (Node, Boolean)) extends Node
-  case object Leaf extends Node
+  case class DecisionNode(
+    tree: Rep[Boolean],
+    semanticPreserving: Boolean,
+    var left: Node,
+    var right: Node) extends Node
+  case class Leaf(decisions: Option[List[Boolean]]) extends Node
   var semanticPreserving = false
-  var root: Node = Leaf
-  var currentNode: Option[DecisionNode] = None
+  def emptyRoot = Leaf(Some(Nil))
+  var root: Node = emptyRoot
+  var parent: Option[DecisionNode] = None
+  var decisions: List[Boolean] = Nil
 
   private def makeDecision(cond: Dyn[Boolean]): Unit = {
+    decisions = decisions :+ cond.static
     // find if we were already here
-    val decision = DecisionNode(cond.static, cond.dynamic, semanticPreserving, (Leaf, !cond.static), (Leaf, cond.static))
-    currentNode match {
-      case None if root == Leaf => // first run or no decisions
+    def leaf(c: Boolean) = if (c) Leaf(Some(decisions)) else Leaf(None)
+    val decision = DecisionNode(cond.dynamic, semanticPreserving, leaf(!cond.static), leaf(cond.static))
+    def updateNode(n: Node): Unit = n match {
+      case node@DecisionNode(_, _, Leaf(None), _) if !cond.static => node.left = Leaf(Some(decisions))
+      case node@DecisionNode(_, _, _, Leaf(None)) if cond.static => node.right = Leaf(Some(decisions))
+      case _ => ()
+    }
+
+    (parent, root) match {
+      case (None, _: Leaf) => // first run or no decisions
         root = decision
-        currentNode = Some(decision)
-      case None => // root is not a leaf (reuse it)
-        val tmpRoot = root.asInstanceOf[DecisionNode]
-        currentNode = Some(tmpRoot)
-        tmpRoot.cond = cond.static
-        if (tmpRoot.right._2 == false && cond.static == true) tmpRoot.right = (tmpRoot.right._1, true)
-        if (tmpRoot.left._2 == false && cond.static == false) tmpRoot.left = (tmpRoot.left._1, true)
-        println("Root case: " + root)
-      case Some(cn@DecisionNode(d, _, _, (l, lvisited), (r,rvisited))) =>
-        if (d) r  match {
-          case Leaf => // never been there
-            cn.right = (decision, true)
-            currentNode = Some(decision)
+        parent = Some(decision)
+
+      case (None, root@DecisionNode(c, s, l, r)) => // root is not a leaf => reuse it
+        parent = Some(root)
+        updateNode(root)
+
+      case (Some(cn@DecisionNode(_, _, l, r)), _) => //
+        val c = decisions(decisions.length-2)
+        if (c) r  match {
+          case _: Leaf =>
+            cn.right = decision
+            parent = Some(decision)
           case node: DecisionNode =>
-            node.cond = d
-            currentNode = Some(node)
+            parent = Some(node)
+            updateNode(node)
         } else l match {
-          case Leaf => // never been there
-            cn.left = (decision, true)
-            currentNode = Some(decision)
+          case _: Leaf =>
+            cn.left = decision
+            parent = Some(decision)
           case node: DecisionNode =>
-            node.cond = d
-            currentNode = Some(node)
+            parent = Some(node)
+            updateNode(node)
         }
     }
   }

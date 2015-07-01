@@ -137,42 +137,26 @@ class TestDynamicCompilation extends FileDiffSuite {
     val UID: Long
     lazy val codegen = new ScalaGenNumericOps with ScalaGenPrimitiveOps with ScalaGenStaticData with ScalaGenOrderingOps with ScalaGenArrayOps
       with ScalaGenVariables with ScalaGenIfThenElse with ScalaGenBooleanOps with GenDynMatrixOps
-      with ScalaGenPrint with DynamicGen /*with LivenessOpt*/ { val IR: self.type = self }
-
-    lazy val guardCodegen = new ScalaGenNumericOps with ScalaGenPrimitiveOps with ScalaGenStaticData with ScalaGenOrderingOps with ScalaGenArrayOps
-      with ScalaGenVariables with ScalaGenIfThenElse with ScalaGenBooleanOps with GenDynMatrixOps
-      with ScalaGenPrint with DynamicGen /*with LivenessOpt*/ { val IR: self.type = self }
+      with ScalaGenPrint with DynamicGen with ScalaGenEqual /*with LivenessOpt*/ { val IR: self.type = self }
 
    def apply(v: Int): Int = {
     def constructGuards[T: Manifest]: Rep[T] = {
-      def constructGuards0(current: Node, decisions: List[Boolean], taken: Boolean): Rep[T] = current match {
-        case Leaf if taken => // call function
-          emitLookup(orderedHoles, decisions.reverse)
-        case Leaf if !taken => // recompile
-          emitRecompile(orderedHoles, decisions.reverse)
+      def constructGuards0(current: Node, decisions: List[Boolean]): Rep[T] = current match {
+        case Leaf(Some(leafDecisions)) => // call function
+          assert(leafDecisions == decisions)
+          emitLookup(orderedHoles, decisions)
+        case Leaf(None) => // recompile
+          emitRecompile(orderedHoles, decisions)
 
-        case DecisionNode(cond, tree, semanticPreserving, (left, takenLeft), (right, takenRight)) =>
-          println("Taken: (" + takenLeft + ", " + takenRight + ")")
-          val thn = constructGuards0(right, true :: decisions, takenRight)
-          val els = constructGuards0(left, false :: decisions, takenLeft)
+        case DecisionNode(tree, semanticPreserving, left, right) =>
+          val thn = constructGuards0(right, decisions :+ true)
+          val els = constructGuards0(left, decisions :+ false)
 
           if (tree) thn else els
       }
 
-      constructGuards0(root, Nil, true)
+      constructGuards0(root, Nil)
     }
-
-    def decisions[T: Manifest]: List[Boolean] = {
-      def decisions0(current: Node, decisions: List[Boolean]): List[Boolean] = current match {
-        case Leaf => decisions
-
-        case DecisionNode(cond, tree, semanticPreserving, (left, _), (right, _)) =>
-          if (cond) decisions0(right, cond :: decisions) else decisions0(left, !cond :: decisions)
-      }
-
-      decisions0(root, Nil)
-    }
-
 
     if (CodeCache.guard.contains(UID)) {
       val (_, guard: (Int => Int), _) = CodeCache.guard(UID)
@@ -182,19 +166,20 @@ class TestDynamicCompilation extends FileDiffSuite {
       def recompile(hole: Int): Int => Int = {
         // reset() // TODO here the decisions need to be kept
         holes.clear()
-        currentNode = None
+        decisions = Nil
+        parent = None
         if (CodeCache.guard.contains(UID)) {
-          val (_, _, decisions) = CodeCache.guard(UID)
-          root = decisions
-          println("Decisions: " + CodeCache.guard(UID)._3)
-          currentNode = None
+          val (_, _, explored) = CodeCache.guard(UID)
+          root = explored
+          println("Explored: " + CodeCache.guard(UID)._3)
+          parent = None
         }
         val code = test()
         val guards = constructGuards[Int]
-        val decs = decisions[Int].reverse
+        val decs = decisions
         // TODO for testing purposes
         println("Guard:")
-        guardCodegen.emitSource(orderedHoles, codegen.reifyBlock(guards)(manifest[Int]), "Test", new PrintWriter(System.out))(manifest[Int])
+        codegen.emitSource(orderedHoles, codegen.reifyBlock(guards)(manifest[Int]), "Test", new PrintWriter(System.out))(manifest[Int])
         println("Code:")
         codegen.emitSource(orderedHoles, codegen.reifyBlock(code)(manifest[Int]), "Test", new PrintWriter(System.out))(manifest[Int])
 
@@ -202,6 +187,7 @@ class TestDynamicCompilation extends FileDiffSuite {
         val function = compile[Int, Int => Int](orderedHoles, code)(manifest[Int])
 
         CodeCache.code  += ((UID, decs)-> function)
+        println("Storing exploration tree: " + root)
         CodeCache.guard += (UID -> (recompile _, guardFunction, root))
         function
       }
@@ -212,9 +198,9 @@ class TestDynamicCompilation extends FileDiffSuite {
 
     override def reset() = {
       super.reset
-      root = Leaf // TODO this needs to be kept
+      root = emptyRoot // TODO this needs to be kept
       holes.clear()
-      currentNode = None
+      parent = None
     }
   }
 
@@ -224,6 +210,9 @@ class TestDynamicCompilation extends FileDiffSuite {
   trait DynArith extends DynamicBase with PrimitiveOps with BooleanOps with DynIfThenElse with Equal with OrderingOps {
     def infix_+(lhs: Dyn[Int], rhs: Dyn[Int]): Dyn[Int] =
       Both(lhs.static + rhs.static, lhs.dynamic + rhs.dynamic)
+
+    def infix_-(lhs: Dyn[Int], rhs: Dyn[Int]): Dyn[Int] =
+      Both(lhs.static - rhs.static, lhs.dynamic - rhs.dynamic)
 
     def infix_*(lhs: Dyn[Int], rhs: Dyn[Int]): Dyn[Int] =
       Both(lhs.static * rhs.static, lhs.dynamic * rhs.dynamic)
@@ -390,8 +379,40 @@ class TestDynamicCompilation extends FileDiffSuite {
       println((new {val UID = 5551L} with Prog with Impl)(x))
       x = 11
       println((new {val UID = 5551L} with Prog with Impl)(x))
-      // x = 20
-      // println((new {val UID = 5551L} with Prog with Impl)(x))
+      x = 20
+      println((new {val UID = 5551L} with Prog with Impl)(x))
+    }
+
+  }
+
+  def testpow = {
+    var x = 1
+    withOutFileChecked(prefix+"dynamic-pow") {
+      trait Prog extends DSL {
+        def test(): Rep[Int] = {
+          def pow(base: Rep[Int], exp: Dyn[Int]): Rep[Int] = {
+            if (exp == lift(0)) 1
+            else base * pow(base, exp - lift(1))
+          }
+
+          pow(unit(2), hole[Int](x,1))
+        }
+      }
+      println((new {val UID = 5552L} with Prog with Impl)(x))
+      x = 1
+      println((new {val UID = 5552L} with Prog with Impl)(x))
+      x = 5
+      println((new {val UID = 5552L} with Prog with Impl)(x))
+      x = 4
+      println((new {val UID = 5552L} with Prog with Impl)(x))
+      x = 3
+      println((new {val UID = 5552L} with Prog with Impl)(x))
+      x = 5
+      println((new {val UID = 5552L} with Prog with Impl)(x))
+      x = 5
+      println((new {val UID = 5552L} with Prog with Impl)(x))
+      x = 1
+      println((new {val UID = 5552L} with Prog with Impl)(x))
     }
 
   }
