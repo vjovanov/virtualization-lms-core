@@ -26,7 +26,7 @@ import scala.tools.nsc.interpreter.AbstractFileClassLoader
 
 trait Compile0 extends BaseExp {
 
-  def compile[B, Ret](syms: List[Sym[_]], f: => Rep[B])(mB: Manifest[B]): Ret
+  def compile[R](syms: List[Sym[_]], f: => Rep[R])(mR: Manifest[R]): Any
 
 }
 
@@ -68,7 +68,7 @@ trait DynCompile extends Expressions with DynamicBase {
 
   var dumpGeneratedCode = false
 
-  def compile[B, Ret](syms: List[Sym[_]], f: => Exp[B])(mB: Manifest[B]): Ret = {
+  def compile[B](syms: List[Sym[_]], f: => Exp[B])(mB: Manifest[B]): Any = {
     if (this.compiler eq null)
       setupCompiler()
 
@@ -105,15 +105,14 @@ trait DynCompile extends Expressions with DynamicBase {
     val cls: Class[_] = loader.loadClass(className)
     val cons = cls.getConstructor(staticData.map(_._1.tp.erasure):_*)
 
-    val obj: Ret = cons.newInstance(staticData.map(_._2.asInstanceOf[AnyRef]):_*).asInstanceOf[Ret]
-    obj
+    cons.newInstance(staticData.map(_._2.asInstanceOf[AnyRef]):_*)
   }
 }
 
 
 trait DynCompileScala extends Compile0 with BaseExp with DynCompile
 
-class Matrix(val m: Double, val n: Double, data: Array[Array[Double]]) {
+class Matrix(val m: Int, val n: Int, data: Array[Array[Double]]) {
   def *(that: Matrix) = {
     ??? // do multiplication
   }
@@ -126,27 +125,25 @@ class TestDynamicCompilation extends FileDiffSuite {
   trait DSL extends LiftNumeric with NumericOps with PrimitiveOps with ArrayOps with BooleanOps
     with LiftVariables with DynIfThenElse with Print with DynamicBase with DynMatrixOps with OrderingOps with DynArith {
     def staticData[T:Manifest](x: T): Rep[T]
-    def test(): Rep[Int]
   }
-
-  trait Impl extends DSL with Runner with ArrayOpsExpOpt with NumericOpsExpOpt with PrimitiveOpsExp with OrderingOpsExpOpt with BooleanOpsExp
+  trait ImplLike extends DSL with ArrayOpsExpOpt with NumericOpsExpOpt with PrimitiveOpsExp with OrderingOpsExpOpt with BooleanOpsExp
       with EqualExpOpt with VariablesExpOpt with StaticDataExp with BooleanOpsExpOpt
       with IfThenElseExpOpt with PrintExp with DynamicExp with DynMatrixOpsExp
-      with DynCompile { self =>
+      with DynCompile
+  abstract class Impl[Ret: Manifest] extends ImplLike { self =>
     //override val verbosity = 1
     val UID: Long
     lazy val codegen = new ScalaGenNumericOps with ScalaGenPrimitiveOps with ScalaGenStaticData with ScalaGenOrderingOps with ScalaGenArrayOps
       with ScalaGenVariables with ScalaGenIfThenElse with ScalaGenBooleanOps with GenDynMatrixOps
       with ScalaGenPrint with DynamicGen with ScalaGenEqual /*with LivenessOpt*/ { val IR: self.type = self }
 
-   def apply(v: Int): Int = {
-    def constructGuards[T: Manifest]: Rep[T] = {
+   private final def constructGuards[T: Manifest]: Rep[T] = {
       def constructGuards0(current: Node, decisions: List[Boolean]): Rep[T] = current match {
         case Leaf(Some(leafDecisions)) => // call function
           assert(leafDecisions == decisions)
-          emitLookup(orderedHoles, decisions)
+          emitLookup[T](orderedHoles, decisions)
         case Leaf(None) => // recompile
-          emitRecompile(orderedHoles, decisions)
+          emitRecompile[T](orderedHoles, decisions)
 
         case DecisionNode(tree, semanticPreserving, left, right) =>
           val thn = constructGuards0(right, decisions :+ true)
@@ -156,45 +153,60 @@ class TestDynamicCompilation extends FileDiffSuite {
       }
 
       constructGuards0(root, Nil)
-    }
-
-    if (CodeCache.guard.contains(UID)) {
-      val (_, guard: (Int => Int), _) = CodeCache.guard(UID)
-      guard(v)
-    } else {
-      // define recompile
-      def recompile(hole: Int): Int => Int = {
-        // reset() // TODO here the decisions need to be kept
-        holes.clear()
-        decisions = Nil
+   }
+   private final def recompile(run: Any) = {
+      holes.clear()
+      decisions = Nil
+      parent = None
+      if (CodeCache.guard.contains(UID)) {
+        val (_, _, explored) = CodeCache.guard(UID)
+        root = explored
         parent = None
-        if (CodeCache.guard.contains(UID)) {
-          val (_, _, explored) = CodeCache.guard(UID)
-          root = explored
-          println("Explored: " + CodeCache.guard(UID)._3)
-          parent = None
-        }
-        val code = test()
-        val guards = constructGuards[Int]
-        val decs = decisions
-        // TODO for testing purposes
-        println("Guard:")
-        codegen.emitSource(orderedHoles, codegen.reifyBlock(guards)(manifest[Int]), "Test", new PrintWriter(System.out))(manifest[Int])
-        println("Code:")
-        codegen.emitSource(orderedHoles, codegen.reifyBlock(code)(manifest[Int]), "Test", new PrintWriter(System.out))(manifest[Int])
-
-        val guardFunction = compile[Int, Int => Int](orderedHoles, guards)(manifest[Int])
-        val function = compile[Int, Int => Int](orderedHoles, code)(manifest[Int])
-
-        CodeCache.code  += ((UID, decs)-> function)
-        println("Storing exploration tree: " + root)
-        CodeCache.guard += (UID -> (recompile _, guardFunction, root))
-        function
       }
-      // TODO pass the values
-      recompile(1)(1)
+      val code: Rep[Ret] = main()
+      val guards: Rep[Ret] = constructGuards[Ret]
+
+      val decs = decisions
+      // TODO for testing purposes
+      println("Guard:")
+      codegen.emitSource(orderedHoles, codegen.reifyBlock(guards)(manifest[Ret]), "Guard", new PrintWriter(System.out))(manifest[Ret])
+      println("Code:")
+      codegen.emitSource(orderedHoles, codegen.reifyBlock(code)(manifest[Ret]), "Code", new PrintWriter(System.out))(manifest[Ret])
+
+      val guardFunction = compile[Ret](orderedHoles, guards)(manifest[Ret])
+      val function = compile[Ret](orderedHoles, code)(manifest[Ret])
+
+      CodeCache.code.update((UID, decs), function)
+      CodeCache.guard.update(UID, (run, guardFunction, root))
+      function
     }
-    }
+
+   def main(): Rep[Ret]
+   def apply[T0: Manifest, T1: Manifest, T2: Manifest](v0: T0, v1: T1, v2: T2): Ret = {
+     def getGuard[T0, T1, T2, Ret]: (T0, T1, T2) => Ret =
+       CodeCache.guard(UID)._2.asInstanceOf[(T0, T1, T2) => Ret]
+
+     if (CodeCache.guard.contains(UID)) {
+       getGuard[T0, T1, T2, Ret](v0, v1, v2)
+     } else { // on the first run
+       def recompileRun(v0: T0, v1: T1, v2: T2): Ret = recompile(recompileRun _).asInstanceOf[(T0, T1, T2) => Ret](v0, v1, v2)
+
+       recompileRun(v0, v1, v2)
+     }
+   }
+
+   def apply[T0: Manifest](v: T0):  Ret = {
+     def getGuard[T0, Ret]: T0 => Ret =
+       CodeCache.guard(UID)._2.asInstanceOf[T0 => Ret]
+
+     if (CodeCache.guard.contains(UID)) {
+       getGuard[T0, Ret](v)
+     } else { // on the first run
+       def recompileRun(v0: T0): Ret = recompile(recompileRun _).asInstanceOf[T0 => Ret](v0)
+
+       recompileRun(v)
+     }
+   }
 
     override def reset() = {
       super.reset
@@ -298,13 +310,13 @@ class TestDynamicCompilation extends FileDiffSuite {
     // TODO need one reduction here
   }
 
-  trait DynMatrixOpsExp extends DynMatrixOps { self: Impl =>
+  trait DynMatrixOpsExp extends DynMatrixOps { self: ImplLike =>
     case class MatrixCarrier(m: Matrix) extends Def[test15.Matrix]
     def toRep(m: Matrix): Rep[test15.Matrix] = MatrixCarrier(m)
   }
 
   trait GenDynMatrixOps extends GenericCodegen {
-    val IR: DynMatrixOpsExp with Expressions with Impl
+    val IR: DynMatrixOpsExp with Expressions with ImplLike
     import IR._
 
     class MatrixOrderOptimization(p: Array[Dyn[Int]]) {
@@ -350,11 +362,6 @@ class TestDynamicCompilation extends FileDiffSuite {
     }
   }
 
-  // test case input data
-  trait Runner extends Compile0 with DynamicBase {
-    def test(): Rep[Int]
-  }
-
 
   // staged program implementations
   val prefix = home + "test-out/epfl/test15-"
@@ -362,25 +369,25 @@ class TestDynamicCompilation extends FileDiffSuite {
   def testBasicIf = {
     var x = 1
     withOutFileChecked(prefix+"dynamic-basic") {
-      trait Prog extends DSL {
-        def test(): Rep[Int] = {
+      class Prog(val UID: Long = 5551L) extends Impl[Int] {
+        def main(): Rep[Int] = {
           if (hole[Int](x, 1) < lift(20))
             if (hole[Int](x, 1) < lift(10)) 0 else 1
           else 2
         }
       }
 
-      println((new {val UID = 5551L} with Prog with Impl)(x))
+      println((new Prog)(x))
       x = 11
-      println((new {val UID = 5551L} with Prog with Impl)(x))
+      println((new Prog)(x))
       x = 20
-      println((new {val UID = 5551L} with Prog with Impl)(x))
+      println((new Prog)(x))
       x = 1
-      println((new {val UID = 5551L} with Prog with Impl)(x))
+      println((new Prog)(x))
       x = 11
-      println((new {val UID = 5551L} with Prog with Impl)(x))
+      println((new Prog)(x))
       x = 20
-      println((new {val UID = 5551L} with Prog with Impl)(x))
+      println((new Prog)(x))
     }
 
   }
@@ -388,8 +395,8 @@ class TestDynamicCompilation extends FileDiffSuite {
   def testpow = {
     var x = 1
     withOutFileChecked(prefix+"dynamic-pow") {
-      trait Prog extends DSL {
-        def test(): Rep[Int] = {
+      class Prog(val UID: Long = 5552L) extends Impl[Int] {
+        def main(): Rep[Int] = {
           def pow(base: Rep[Int], exp: Dyn[Int]): Rep[Int] = {
             if (exp == lift(0)) 1
             else base * pow(base, exp - lift(1))
@@ -398,29 +405,78 @@ class TestDynamicCompilation extends FileDiffSuite {
           pow(unit(2), hole[Int](x,1))
         }
       }
-      println((new {val UID = 5552L} with Prog with Impl)(x))
+      println((new Prog)(x))
       x = 1
-      println((new {val UID = 5552L} with Prog with Impl)(x))
+      println((new Prog)(x))
       x = 5
-      println((new {val UID = 5552L} with Prog with Impl)(x))
+      println((new Prog)(x))
       x = 4
-      println((new {val UID = 5552L} with Prog with Impl)(x))
+      println((new Prog)(x))
       x = 3
-      println((new {val UID = 5552L} with Prog with Impl)(x))
+      println((new Prog)(x))
       x = 5
-      println((new {val UID = 5552L} with Prog with Impl)(x))
+      println((new Prog)(x))
       x = 5
-      println((new {val UID = 5552L} with Prog with Impl)(x))
+      println((new Prog)(x))
       x = 1
-      println((new {val UID = 5552L} with Prog with Impl)(x))
+      println((new Prog)(x))
     }
 
   }
 
+  def test3inputs = {
+    var (x, y, z) = (1, 2, 3)
+    withOutFileChecked(prefix+"dynamic-3inputs") {
+      class Prog(val UID: Long = 5552L) extends Impl[Int] {
+        def main(): Rep[Int] = {
+          if (hole[Int](x,1) > hole[Int](y,2) + hole[Int](z, 3)) unit(1) else unit(2)
+        }
+      }
+      println((new Prog)(x))
+      x = 1
+      println((new Prog)(x))
+      x = 5
+      println((new Prog)(x))
+      x = 4
+      println((new Prog)(x))
+      x = 3
+      println((new Prog)(x))
+      x = 5
+      println((new Prog)(x))
+      x = 5
+      println((new Prog)(x))
+      x = 1
+      println((new Prog)(x))
+    }
+
+  }
+
+  /*def testMatrixMult = {
+    val mat = Array(
+      Array[Double](1.0,2,3,4,5),
+      Array[Double](1.0,2,3,4,5),
+      Array[Double](1.0,2,3,4,5),
+      Array[Double](1.0,2,3,4,5),
+      Array[Double](1.0,2,3,4,5)
+    )
+    val x = Matrix(2, 5, mat)
+    val y = Matrix(5, 2, mat)
+    val z = Matrix(2, 2, mat)
+
+    withOutFileChecked(prefix+"dynamic-matrices") {
+      class Prog(val UID: Long = 5552L) extends Impl[Int] {
+        def main(): Rep[Int] = {
+          toRep(hole[Matrix](x, 1) * hole[Matrix](y, 2) * hole[Matrix](z, 3))
+        }
+      }
+    }
+
+  }*
+
   /*def testDynamic = {
     withOutFileChecked(prefix+"dynamic-basic") {
       trait Prog extends DSL {
-        def test(): Rep[test15.Matrix] = {
+        def main(): Rep[test15.Matrix] = {
           val mat = Array(
              Array[Double](unit(1.0),unit(2),unit(3),unit(4),unit(5)),
              Array[Double](unit(1.0),unit(2),unit(3),unit(4),unit(5)),

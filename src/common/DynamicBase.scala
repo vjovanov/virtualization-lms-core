@@ -74,8 +74,8 @@ trait DynamicGen extends internal.GenericCodegen {
     case Lookup(id, syms, decisions) =>
       emitValDef(sym, s"""scala.virtualization.lms.common.CodeCache.code(($id, ${decisions.toArray.mkString("List(", ",", ")")})).asInstanceOf[(${syms.map(_.tp.toString).mkString("", ", ", "")}) => ${sym.tp.toString}].apply(${syms.map(quote).mkString("",",", "")})""")
     case Recompile(id, syms, decisions) =>
-      stream.println(s"val (recompile: (${syms.map(_.tp.toString).mkString("", ", ", "")} => ${syms.map(_.tp.toString).mkString("", ", ", "")} => ${sym.tp.toString}), _, _) = scala.virtualization.lms.common.CodeCache.guard($UID)")
-      emitValDef(sym, s"recompile(${syms.map(quote).mkString("",",", "")})(${syms.map(quote).mkString("",",", "")})")
+      stream.println(s"val (recompileRun: ((${syms.map(_.tp.toString).mkString("", ", ", "")}) => ${sym.tp.toString}), _, _) = scala.virtualization.lms.common.CodeCache.guard($UID)")
+      emitValDef(sym, s"recompileRun(${syms.map(quote).mkString("",",", "")})")
     case _ => super.emitNode(sym, rhs)
   }
 }
@@ -104,7 +104,7 @@ trait DynIfThenElse extends DynamicBase with IfThenElse {
     def updateNode(n: Node): Unit = n match {
       case node@DecisionNode(_, _, Leaf(None), _) if !cond.static => node.left = Leaf(Some(decisions))
       case node@DecisionNode(_, _, _, Leaf(None)) if cond.static => node.right = Leaf(Some(decisions))
-      case _ => ()
+      case _ =>
     }
 
     (parent, root) match {
