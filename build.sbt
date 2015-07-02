@@ -47,3 +47,5 @@ autoCompilerPlugins := true
 // code coverage
 
 scoverage.ScoverageSbtPlugin.ScoverageKeys.coverageHighlighting := false
+
+libraryDependencies += "org.scalanlp" % "breeze_2.11" % "0.10"

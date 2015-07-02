@@ -33,6 +33,8 @@ trait DynamicBase extends Base {
 
   // holes
   def hole[T: Manifest](v: T, nr: Int): Dyn[T] = Both(v, holeImpl[T](nr))
+  // TODO implicit evidence
+  def holeRep[T: Manifest](v: T, nr: Int): Rep[T] = holeImpl[T](nr)
 
   protected def holeImpl[T: Manifest](nr: Int): Rep[T]
 
