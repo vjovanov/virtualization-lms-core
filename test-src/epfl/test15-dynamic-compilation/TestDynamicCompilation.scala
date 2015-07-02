@@ -118,13 +118,13 @@ class TestDynamicCompilation extends FileDiffSuite {
   // boilerplate definitions for DSL interface
 
   trait DSL extends LiftNumeric with common.NumericOps with PrimitiveOps with ArrayOps with BooleanOps
-    with LiftVariables with DynIfThenElse with Print with DynamicBase with OrderingOps with DynArith with MatrixOps {
+    with LiftVariables with DynIfThenElse with Print with DynamicBase with OrderingOps with DynArith with MatrixOps with DynMatrixOps with OverloadHack {
     def staticData[T:Manifest](x: T): Rep[T]
   }
   trait ImplLike extends DSL with ArrayOpsExpOpt with NumericOpsExpOpt with PrimitiveOpsExp with OrderingOpsExpOpt with BooleanOpsExp
       with EqualExpOpt with VariablesExpOpt with StaticDataExp with BooleanOpsExpOpt
       with IfThenElseExpOpt with PrintExp with DynamicExp with MatrixOpsExp
-      with DynCompile
+      with DynCompile with DynMatrixOpsExp
   abstract class Impl[Ret: Manifest] extends ImplLike { self =>
     //override val verbosity = 1
     val UID: Long
@@ -298,8 +298,36 @@ class TestDynamicCompilation extends FileDiffSuite {
        case MatrixMult(l, r) => emitValDef(sym, quote(l) + " * " + quote(r))
        case MatrixN(l) => emitValDef(sym, quote(l) + ".n")
        case MatrixM(l) => emitValDef(sym, quote(l) + ".m")
+       case _ => super.emitNode(sym, rhs)
      }
   }
+
+  trait DynMatrixOps { self: DSL =>
+    type DynMatrix
+
+    implicit class DynMatrixOps(l: DynMatrix) {
+      def m: Dyn[Int] = matrix_m(l)
+      def n: Dyn[Int] = matrix_n(l)
+      def *(r: DynMatrix): DynMatrix = matrix_*(l,r)
+    }
+
+    def matrix_*(l: DynMatrix, r: DynMatrix)(implicit h:Overloaded1): DynMatrix
+    def matrix_m(l: DynMatrix)(implicit h:Overloaded1): Dyn[Int]
+    def matrix_n(l: DynMatrix)(implicit h:Overloaded1): Dyn[Int]
+    def holeM(x: DenseMatrix[Double], nr: Int): DynMatrix
+  }
+
+    trait DynMatrixOpsExp extends DynMatrixOps { self: ImplLike =>
+      final case class DynMatrix(m: Dyn[Int], n: Dyn[Int], matrix: Rep[DenseMatrix[Double]]) extends Def[DenseMatrix[Double]]
+
+      def holeM(x: DenseMatrix[Double], nr: Int): DynMatrix = DynMatrix(lift(x.cols), lift(x.rows), holeRep[DenseMatrix[Double]](x, nr))
+
+      def matrix_*(l: DynMatrix, r: DynMatrix)(implicit h:Overloaded1): DynMatrix =
+        DynMatrix(l.m, r.n, l.matrix * r.matrix)
+
+      def matrix_m(l: DynMatrix)(implicit h:Overloaded1): Dyn[Int] = l.m
+      def matrix_n(l: DynMatrix)(implicit h:Overloaded1): Dyn[Int] = l.n
+    }
 
   /*trait DynMatrixOps extends DynArith { self: DSL =>
     def toRep(m: Matrix): Rep[test15.Matrix]
@@ -495,7 +523,7 @@ class TestDynamicCompilation extends FileDiffSuite {
     withOutFileChecked(prefix+"basic-matrices") {
       class Prog(val UID: Long = 5552L) extends Impl[DenseMatrix[Double]] {
         def main(): Rep[DenseMatrix[Double]] = {
-          holeRep[DenseMatrix[Double]](x, 1) * holeRep[DenseMatrix[Double]](y, 2) * holeRep[DenseMatrix[Double]](z, 3)
+          holeM(x, 1) * holeM(y, 2) * holeM(z, 3)
         }
       }
       println((new Prog)(x, y, z))

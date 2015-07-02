@@ -18,6 +18,7 @@ object CodeCache {
 trait DynamicBase extends Base {
   type Dyn[+T] = Both[T]
 
+  trait Static
   case class Both[+T](static: T , dynamic: Rep[T]){
     /**
      * Redirect the invocation to both values at the same time producing new both on the way.
