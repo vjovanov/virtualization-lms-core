@@ -117,21 +117,34 @@ class TestDynamicCompilation extends FileDiffSuite {
 
   // boilerplate definitions for DSL interface
 
+  trait MatrixChainTransformer extends ForwardTransformer {
+    val IR: ImplLike
+    import IR._
+
+    override def transformStm(stm: Stm): Exp[Any] = stm match {
+      case _ => //TTP(s, _, Def(dm: DynMatrix)) =>
+      println(stm)
+        super.transformStm(stm)
+      case _ => super.transformStm(stm)
+    }
+  }
+
   trait DSL extends LiftNumeric with common.NumericOps with PrimitiveOps with ArrayOps with BooleanOps
     with LiftVariables with DynIfThenElse with Print with DynamicBase with OrderingOps with DynArith with MatrixOps with DynMatrixOps with OverloadHack {
     def staticData[T:Manifest](x: T): Rep[T]
   }
   trait ImplLike extends DSL with ArrayOpsExpOpt with NumericOpsExpOpt with PrimitiveOpsExp with OrderingOpsExpOpt with BooleanOpsExp
       with EqualExpOpt with VariablesExpOpt with StaticDataExp with BooleanOpsExpOpt
-      with IfThenElseExpOpt with PrintExp with DynamicExp with MatrixOpsExp
+      with IfThenElseExpOpt with PrintExp with DynamicExp with MatrixOpsExp with Transforming
       with DynCompile with DynMatrixOpsExp
   abstract class Impl[Ret: Manifest] extends ImplLike { self =>
     //override val verbosity = 1
     val UID: Long
     lazy val codegen = new ScalaGenNumericOps with ScalaGenPrimitiveOps with ScalaGenStaticData with ScalaGenOrderingOps with ScalaGenArrayOps
       with ScalaGenVariables with ScalaGenIfThenElse with ScalaGenBooleanOps
-      with ScalaGenPrint with ScalaGenEqual with GenMatrixExp with DynamicGen { val IR: self.type = self }
+      with ScalaGenPrint with ScalaGenEqual with GenMatrixExp with DynamicGen with GenDynMatrixExp { val IR: self.type = self }
 
+   val matrixMultTransformer = new MatrixChainTransformer {val IR: self.type = self }
    private final def constructGuards[T: Manifest]: Rep[T] = {
       def constructGuards0(current: Node, decisions: List[Boolean]): Rep[T] = current match {
         case Leaf(Some(leafDecisions)) => // call function
@@ -159,6 +172,10 @@ class TestDynamicCompilation extends FileDiffSuite {
         parent = None
       }
       val code: Rep[Ret] = main()
+
+      // semantic preserving
+      val transformedCode = matrixMultTransformer(codegen.reifyBlock(code))
+      println(transformedCode)
       val guards: Rep[Ret] = constructGuards[Ret]
 
       val decs = decisions
@@ -242,32 +259,6 @@ class TestDynamicCompilation extends FileDiffSuite {
     def dassert(c: => Dyn[Boolean]): Rep[Unit] = if (infix_unary_!(c)) ???
   }
 
-  //   trait MatrixOps { self: DSL =>
-
-  //     implicit class MatrixOps(self: Rep[test15.Matrix]) {
-  //       def m: Rep[Int] = _m(self)
-  //       def n: Rep[Int] = _m(self)
-
-  //       def *(that: Rep[test15.Matrix]): Rep[test15.Matrix] = mat_times(self, that)
-  //       def +(that: Matrix): Matrix = mat_add(self, that)
-  //     }
-
-  //   case class NewMatrix(m: Rep[Int], n: Rep[Int], data: Rep[Array[Array[Double]]], cost: Rep[Int] = unit(0)) extends Rep[test15.Matrix]
-
-  //   case class MatrixMult(lhs: Matrix, rhs: Matrix) extends Matrix {
-  //     def m: Dyn[Int] = rhs.m
-  //     def n: Dyn[Int] = lhs.n
-  //     def cost: Dyn[Int] = lhs.cost + rhs.cost + lhs.n * rhs.n * rhs.m
-  //   }
-
-  //   case class MatrixPlus(lhs: Matrix, rhs: Matrix) extends Matrix {
-  //     def m: Dyn[Int] = lhs.m
-  //     def n: Dyn[Int] = rhs.n
-  //     def cost: Dyn[Int] = lhs.cost + rhs.cost + m * n
-  //   }
-  //   // TODO need one reduction here
-  // }
-
   trait MatrixOps { self: DSL =>
 
     implicit class MatrixOps(l: Rep[DenseMatrix[Double]]) {
@@ -281,7 +272,7 @@ class TestDynamicCompilation extends FileDiffSuite {
     def matrix_n(l: Rep[DenseMatrix[Double]]): Rep[Int]
   }
 
-  trait MatrixOpsExp extends MatrixOps { self: ImplLike =>
+  trait MatrixOpsExp extends MatrixOps with Transforming { self: ImplLike =>
     case class MatrixMult(l: Rep[DenseMatrix[Double]], r: Rep[DenseMatrix[Double]]) extends Def[DenseMatrix[Double]]
     case class MatrixN(l: Rep[DenseMatrix[Double]]) extends Def[Int]
     case class MatrixM(l: Rep[DenseMatrix[Double]]) extends Def[Int]
@@ -289,6 +280,14 @@ class TestDynamicCompilation extends FileDiffSuite {
     def matrix_*(l: Rep[DenseMatrix[Double]], r: Rep[DenseMatrix[Double]]): Rep[DenseMatrix[Double]] = MatrixMult(l, r)
     def matrix_m(l: Rep[DenseMatrix[Double]]): Rep[Int] = MatrixM(l)
     def matrix_n(l: Rep[DenseMatrix[Double]]): Rep[Int] = MatrixN(l)
+
+    override def mirror[A:Manifest](e: Def[A], f: Transformer)(implicit pos: SourceContext): Exp[A] = (e match {
+       case MatrixMult(l, r) => matrix_*(f(l), f(r))
+       case MatrixN(l) => matrix_n(f(l))
+       case MatrixM(l) => matrix_m(f(l))
+       case Hole(n) => toAtom(Hole(n))
+       case _ => super.mirror(e,f)
+     }).asInstanceOf[Exp[A]] // why??
   }
 
   trait GenMatrixExp extends ScalaGenBase {
@@ -300,11 +299,11 @@ class TestDynamicCompilation extends FileDiffSuite {
        case MatrixM(l) => emitValDef(sym, quote(l) + ".m")
        case _ => super.emitNode(sym, rhs)
      }
+
   }
 
-  trait DynMatrixOps { self: DSL =>
+  trait DynMatrixOps extends MatrixOps { self: DSL =>
     type DynMatrix
-
     implicit class DynMatrixOps(l: DynMatrix) {
       def m: Dyn[Int] = matrix_m(l)
       def n: Dyn[Int] = matrix_n(l)
@@ -317,18 +316,39 @@ class TestDynamicCompilation extends FileDiffSuite {
     def holeM(x: DenseMatrix[Double], nr: Int): DynMatrix
   }
 
-    trait DynMatrixOpsExp extends DynMatrixOps { self: ImplLike =>
-      final case class DynMatrix(m: Dyn[Int], n: Dyn[Int], matrix: Rep[DenseMatrix[Double]]) extends Def[DenseMatrix[Double]]
+    trait DynMatrixOpsExp extends DynMatrixOps with Transforming { self: ImplLike =>
+      type DynMatrix = Exp[DenseMatrix[Double]] with Static
 
-      def holeM(x: DenseMatrix[Double], nr: Int): DynMatrix = DynMatrix(lift(x.cols), lift(x.rows), holeRep[DenseMatrix[Double]](x, nr))
+      final case class DMatrix(m: Dyn[Int], n: Dyn[Int], matrix: Rep[DenseMatrix[Double]]) extends Def[DenseMatrix[Double]]
+      implicit def toSDAtom(v: Def[DenseMatrix[Double]]): Exp[DenseMatrix[Double]] with Static = toAtom(v).asInstanceOf[Exp[DenseMatrix[Double]] with Static]
 
-      def matrix_*(l: DynMatrix, r: DynMatrix)(implicit h:Overloaded1): DynMatrix =
-        DynMatrix(l.m, r.n, l.matrix * r.matrix)
+      def holeM(x: DenseMatrix[Double], nr: Int): DynMatrix = DMatrix(lift(x.cols), lift(x.rows), holeRep[DenseMatrix[Double]](x, nr))
 
-      def matrix_m(l: DynMatrix)(implicit h:Overloaded1): Dyn[Int] = l.m
-      def matrix_n(l: DynMatrix)(implicit h:Overloaded1): Dyn[Int] = l.n
+      def matrix_*(l: DynMatrix, r: DynMatrix)(implicit h:Overloaded1): DynMatrix = {
+        DMatrix(l.m, r.n, MatrixMult(l, r))
+      }
+
+      def matrix_m(l: DynMatrix)(implicit h:Overloaded1): Dyn[Int] = l match {
+        case Def(DMatrix(l, _, _ )) => l
+      }
+      def matrix_n(l: DynMatrix)(implicit h:Overloaded1): Dyn[Int] = l match {
+        case Def(DMatrix(_, r, _ )) => r
+      }
+
+      override def mirror[A:Manifest](e: Def[A], f: Transformer)(implicit pos: SourceContext): Exp[A] = (e match {
+       case DMatrix(l, r, matrix) => toSDAtom(DMatrix(Both(l.static, f(l.dynamic)), Both(r.static, f(r.dynamic)), f(matrix)))
+       case _ => super.mirror(e,f)
+     }).asInstanceOf[Exp[A]] // why??
     }
 
+  trait GenDynMatrixExp extends ScalaGenBase {
+     val IR: MatrixOpsExp with Expressions with ImplLike
+     import IR._
+     override def emitNode(sym: Sym[Any], rhs: Def[Any]) = rhs match {
+       case DMatrix(cols, rows, m) => emitValDef(sym, quote(m))
+       case _ => super.emitNode(sym, rhs)
+     }
+  }
   /*trait DynMatrixOps extends DynArith { self: DSL =>
     def toRep(m: Matrix): Rep[test15.Matrix]
     trait Matrix {
@@ -521,9 +541,10 @@ class TestDynamicCompilation extends FileDiffSuite {
                         (4.0,5.0))
 
     withOutFileChecked(prefix+"basic-matrices") {
-      class Prog(val UID: Long = 5552L) extends Impl[DenseMatrix[Double]] {
+      class Prog(val UID: Long = 5553L) extends Impl[DenseMatrix[Double]] {
         def main(): Rep[DenseMatrix[Double]] = {
-          holeM(x, 1) * holeM(y, 2) * holeM(z, 3)
+          val m2 = holeM(x, 1) * holeM(y, 2)
+          m2 * holeM(z, 3)
         }
       }
       println((new Prog)(x, y, z))

@@ -14,6 +14,8 @@ scalaSource in Test <<= baseDirectory(_ / "test-src")
 
 scalacOptions += "-Yvirtualize"
 
+scalacOptions += "-DshowSuppressedErrors=true"
+
 //scalacOptions += "-Yvirtpatmat"
 
 //scalacOptions in Compile ++= Seq(/*Unchecked, */Deprecation)
