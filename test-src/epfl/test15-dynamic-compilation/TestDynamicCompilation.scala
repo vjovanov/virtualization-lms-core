@@ -31,7 +31,7 @@ trait Compile0 extends BaseExp {
 }
 
 
-trait DynCompile extends Expressions with DynamicBase {
+trait DynCompile extends Expressions with DynamicBase with Blocks {
 
   val codegen: ScalaCodegen { val IR: DynCompile.this.type }
 
@@ -68,7 +68,10 @@ trait DynCompile extends Expressions with DynamicBase {
 
   var dumpGeneratedCode = false
 
-  def compile[B](syms: List[Sym[_]], f: => Exp[B])(mB: Manifest[B]): Any = {
+  def compile[B](syms: List[Sym[_]], f: => Exp[B])(mB: Manifest[B]): Any =
+    compileBlock[B](syms, codegen.reifyBlock(f)(mB))(mB)
+
+  def compileBlock[B](syms: List[Sym[_]], f: codegen.Block[B])(mB: Manifest[B]): Any = {
     if (this.compiler eq null)
       setupCompiler()
 
@@ -76,7 +79,7 @@ trait DynCompile extends Expressions with DynamicBase {
     compileCount += 1
 
     val source = new StringWriter()
-    val staticData = codegen.emitSource(syms, codegen.reifyBlock(f)(mB), className, new PrintWriter(source))(mB)
+    val staticData = codegen.emitSource(syms, f, className, new PrintWriter(source))(mB)
     codegen.emitDataStructures(new PrintWriter(source))
 
     if (dumpGeneratedCode) println(source)
@@ -121,11 +124,55 @@ class TestDynamicCompilation extends FileDiffSuite {
     val IR: ImplLike
     import IR._
 
+    class MatrixOrderOptimization(p: Array[Dyn[Int]]) {
+      val n: Int = p.length - 1
+      val m: scala.Array[scala.Array[Dyn[Int]]] = scala.Array.fill[Dyn[Int]](n, n)(lift(0))
+      val s: scala.Array[scala.Array[Dyn[Int]]] = scala.Array.ofDim[Dyn[Int]](n, n)
+
+      for (ii: Int <- 1 until n; i: Int <- 0 until n - ii) {
+        val j: Int = i + ii
+        m.apply(i).update(j, lift(scala.Int.MaxValue)) // TODO remove ArrayOps
+        for (k <- i until j) {
+          val q: Dyn[Int] = m(i)(k) + m(k + 1)(j) + p(i) * p(k + 1) * p(j + 1)
+          if (q < m(i)(j)) {
+            m(i)(j) = q
+            s(i)(j) = lift(k)
+          }
+        }
+      }
+
+      def optimalChain(m: Array[DMatrix]): Exp[DenseMatrix[Double]] = {
+        def optimalChain0(i: Int, j: Int): Exp[DenseMatrix[Double]] =
+          if (i != j) MatrixMult(optimalChain0(i, unlift(s(i)(j))), optimalChain0(unlift((s(i)(j) + lift(1))), j))
+          else m(i)
+
+        optimalChain0(0, s.length-1)
+      }
+    }
+
+    val chains: mutable.Map[Sym[_], List[DMatrix]] = mutable.Map.empty[Sym[_], List[DMatrix]]
+
     override def transformStm(stm: Stm): Exp[Any] = stm match {
-      case _ => //TTP(s, _, Def(dm: DynMatrix)) =>
-      println(stm)
+
+      case TP(s, m@DMatrix(l, r, Def(x:Hole[DenseMatrix[Double]]))) =>
+        chains.update(s, List(m))
         super.transformStm(stm)
-      case _ => super.transformStm(stm)
+
+      case TP(s, mult@DMatrix(_, _, Def(MatrixMult(l: Sym[_], r: Sym[_])))) =>
+        chains.update(s, chains(l) ++ chains(r))
+        super.transformStm(stm)
+
+      case c@TP(s, Chain(x: Sym[_])) =>
+        // do the reordering
+        val originalChain = chains(x)
+        val sizes: List[Dyn[Int]] = originalChain.tail
+          .foldLeft(scala.List(originalChain.head.m, originalChain.head.n))((agg, m) => agg :+ m.n)
+        val optimizer = new MatrixOrderOptimization(sizes.toArray)
+
+        optimizer.optimalChain(originalChain.toArray)
+
+      case _ =>
+        super.transformStm(stm)
     }
   }
 
@@ -183,10 +230,10 @@ class TestDynamicCompilation extends FileDiffSuite {
       println("Guard:")
       codegen.emitSource(orderedHoles, codegen.reifyBlock(guards)(manifest[Ret]), "Guard", new PrintWriter(System.out))(manifest[Ret])
       println("Code:")
-      codegen.emitSource(orderedHoles, codegen.reifyBlock(code)(manifest[Ret]), "Code", new PrintWriter(System.out))(manifest[Ret])
+      codegen.emitSource(orderedHoles, transformedCode, "Code", new PrintWriter(System.out))(manifest[Ret])
 
       val guardFunction = compile[Ret](orderedHoles, guards)(manifest[Ret])
-      val function = compile[Ret](orderedHoles, code)(manifest[Ret])
+      val function = compileBlock[Ret](orderedHoles, transformedCode)(manifest[Ret])
 
       CodeCache.code.update((UID, decs), function)
       CodeCache.guard.update(UID, (run, guardFunction, root))
@@ -295,8 +342,8 @@ class TestDynamicCompilation extends FileDiffSuite {
      import IR._
      override def emitNode(sym: Sym[Any], rhs: Def[Any]) = rhs match {
        case MatrixMult(l, r) => emitValDef(sym, quote(l) + " * " + quote(r))
-       case MatrixN(l) => emitValDef(sym, quote(l) + ".n")
-       case MatrixM(l) => emitValDef(sym, quote(l) + ".m")
+       case MatrixN(l) => emitValDef(sym, quote(l) + ".cols")
+       case MatrixM(l) => emitValDef(sym, quote(l) + ".rows")
        case _ => super.emitNode(sym, rhs)
      }
 
@@ -314,15 +361,22 @@ class TestDynamicCompilation extends FileDiffSuite {
     def matrix_m(l: DynMatrix)(implicit h:Overloaded1): Dyn[Int]
     def matrix_n(l: DynMatrix)(implicit h:Overloaded1): Dyn[Int]
     def holeM(x: DenseMatrix[Double], nr: Int): DynMatrix
+    def chain(x: DynMatrix): Rep[DenseMatrix[Double]]
   }
 
     trait DynMatrixOpsExp extends DynMatrixOps with Transforming { self: ImplLike =>
       type DynMatrix = Exp[DenseMatrix[Double]] with Static
 
+      case class Chain(x: DynMatrix) extends Def[DenseMatrix[Double]]
       final case class DMatrix(m: Dyn[Int], n: Dyn[Int], matrix: Rep[DenseMatrix[Double]]) extends Def[DenseMatrix[Double]]
       implicit def toSDAtom(v: Def[DenseMatrix[Double]]): Exp[DenseMatrix[Double]] with Static = toAtom(v).asInstanceOf[Exp[DenseMatrix[Double]] with Static]
 
-      def holeM(x: DenseMatrix[Double], nr: Int): DynMatrix = DMatrix(lift(x.cols), lift(x.rows), holeRep[DenseMatrix[Double]](x, nr))
+      def holeM(x: DenseMatrix[Double], nr: Int): DynMatrix ={
+        val mat = holeRep[DenseMatrix[Double]](x, nr)
+        DMatrix(Both(x.cols, mat.m), Both(x.rows, mat.n), mat)
+      }
+
+      def chain(x: DynMatrix): Rep[DenseMatrix[Double]] = Chain(x)
 
       def matrix_*(l: DynMatrix, r: DynMatrix)(implicit h:Overloaded1): DynMatrix = {
         DMatrix(l.m, r.n, MatrixMult(l, r))
@@ -544,7 +598,7 @@ class TestDynamicCompilation extends FileDiffSuite {
       class Prog(val UID: Long = 5553L) extends Impl[DenseMatrix[Double]] {
         def main(): Rep[DenseMatrix[Double]] = {
           val m2 = holeM(x, 1) * holeM(y, 2)
-          m2 * holeM(z, 3)
+          chain(m2 * holeM(z, 3))
         }
       }
       println((new Prog)(x, y, z))

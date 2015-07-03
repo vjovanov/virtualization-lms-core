@@ -44,7 +44,7 @@ trait DynamicBase extends Base {
 trait DynamicExp extends internal.Expressions with DynamicBase with BaseExp {
   val UID: Long
   case class DConst[+T:Manifest](x: T) extends Exp[T]
-  protected def dunit[T:Manifest](x: T): Rep[T] = DConst(x)
+  protected def dunit[T:Manifest](x: T): Rep[T] = Const(x)
   val holes = mutable.HashMap.empty[Int, Sym[_]]
   case class Hole[T: Manifest](id: Int) extends Def[T]
   def holeImpl[T: Manifest](nr: Int): Rep[T] = {
