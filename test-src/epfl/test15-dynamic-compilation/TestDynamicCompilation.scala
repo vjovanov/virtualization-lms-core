@@ -125,6 +125,7 @@ class TestDynamicCompilation extends FileDiffSuite {
     import IR._
 
     class MatrixOrderOptimization(p: Array[Dyn[Int]]) {
+      println("Matrices: " + p.map(_.static).toList.mkString("[", ",", "]"))
       val n: Int = p.length - 1
       val m: scala.Array[scala.Array[Dyn[Int]]] = scala.Array.fill[Dyn[Int]](n, n)(lift(0))
       val s: scala.Array[scala.Array[Dyn[Int]]] = scala.Array.ofDim[Dyn[Int]](n, n)
@@ -154,12 +155,15 @@ class TestDynamicCompilation extends FileDiffSuite {
 
     override def transformStm(stm: Stm): Exp[Any] = stm match {
 
-      case TP(s, m@DMatrix(l, r, Def(x:Hole[DenseMatrix[Double]]))) =>
+      case TP(s, m@DMatrix(l, r, Def(Hole(nr)))) =>
         chains.update(s, List(m))
+        println(m)
         super.transformStm(stm)
 
       case TP(s, mult@DMatrix(_, _, Def(MatrixMult(l: Sym[_], r: Sym[_])))) =>
         chains.update(s, chains(l) ++ chains(r))
+        println(chains(l).map(x => (x.m.static, x.n.static, x)).mkString("", " X ", ""))
+        println(chains(r).map(x => (x.m.static, x.n.static)).mkString("", " X ", ""))
         super.transformStm(stm)
 
       case c@TP(s, Chain(x: Sym[_])) =>
@@ -167,8 +171,12 @@ class TestDynamicCompilation extends FileDiffSuite {
         val originalChain = chains(x)
         val sizes: List[Dyn[Int]] = originalChain.tail
           .foldLeft(scala.List(originalChain.head.m, originalChain.head.n))((agg, m) => agg :+ m.n)
-        val optimizer = new MatrixOrderOptimization(sizes.toArray)
 
+        println("Original chain: ")
+        println(originalChain.map(x => (x.m.static, x.n.static) + " X "))
+        println("Sizes: ")
+        println(sizes)
+        val optimizer = new MatrixOrderOptimization(sizes.toArray)
         optimizer.optimalChain(originalChain.toArray)
 
       case _ =>
@@ -189,9 +197,22 @@ class TestDynamicCompilation extends FileDiffSuite {
     val UID: Long
     lazy val codegen = new ScalaGenNumericOps with ScalaGenPrimitiveOps with ScalaGenStaticData with ScalaGenOrderingOps with ScalaGenArrayOps
       with ScalaGenVariables with ScalaGenIfThenElse with ScalaGenBooleanOps
-      with ScalaGenPrint with ScalaGenEqual with GenMatrixExp with DynamicGen with GenDynMatrixExp { val IR: self.type = self }
+      with ScalaGenPrint with ScalaGenEqual with GenMatrixExp with DynamicGen with GenDynMatrixExp { val IR: self.type = self
+         override def emitNode(sym: Sym[Any], rhs: Def[Any]) = rhs match {
 
-   val matrixMultTransformer = new MatrixChainTransformer {val IR: self.type = self }
+           case PEU(x) =>
+             stream.println(s"println(${quote(x)})")
+             emitValDef(sym, quote(x))
+
+           case _ => super.emitNode(sym, rhs)
+     }
+      }
+
+
+   // TODO Remove
+   case class PEU(x: Exp[Boolean]) extends Def[Boolean]
+   def printAndUse(x: Exp[Boolean]): Exp[Boolean] = PEU(x)
+
    private final def constructGuards[T: Manifest]: Rep[T] = {
       def constructGuards0(current: Node, decisions: List[Boolean]): Rep[T] = current match {
         case Leaf(Some(leafDecisions)) => // call function
@@ -203,30 +224,34 @@ class TestDynamicCompilation extends FileDiffSuite {
         case DecisionNode(tree, semanticPreserving, left, right) =>
           val thn = constructGuards0(right, decisions :+ true)
           val els = constructGuards0(left, decisions :+ false)
-
-          if (tree) thn else els
+          if (printAndUse(tree)) thn else els
       }
 
       constructGuards0(root, Nil)
    }
    private final def recompile(run: Any) = {
+      globalDefs.foreach(println)
       holes.clear()
       decisions = Nil
       parent = None
+      val matrixMultTransformer = new MatrixChainTransformer { val IR: self.type = self }
       if (CodeCache.guard.contains(UID)) {
         val (_, _, explored) = CodeCache.guard(UID)
         root = explored
+        println("Root: " + root)
         parent = None
       }
       val code: Rep[Ret] = main()
 
       // semantic preserving
       val transformedCode = matrixMultTransformer(codegen.reifyBlock(code))
-      println(transformedCode)
+
       val guards: Rep[Ret] = constructGuards[Ret]
 
       val decs = decisions
+      println("decisions:" + decisions)
       // TODO for testing purposes
+      println(orderedHoles)
       println("Guard:")
       codegen.emitSource(orderedHoles, codegen.reifyBlock(guards)(manifest[Ret]), "Guard", new PrintWriter(System.out))(manifest[Ret])
       println("Code:")
@@ -241,6 +266,22 @@ class TestDynamicCompilation extends FileDiffSuite {
     }
 
    def main(): Rep[Ret]
+
+   def apply[T0: Manifest, T1: Manifest, T2: Manifest, T3: Manifest, T4: Manifest, T5: Manifest, T6: Manifest, T7: Manifest, T8: Manifest, T9: Manifest](
+    v0: T0, v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7, v8: T8, v9: T9): Ret = {
+     def getGuard[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, Ret]: (T0, T1, T2, T3, T4, T5, T6, T7, T8, T9) => Ret =
+       CodeCache.guard(UID)._2.asInstanceOf[(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9) => Ret]
+
+     if (CodeCache.guard.contains(UID)) {
+       getGuard[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, Ret](v0, v1, v2, v3, v4, v5, v6, v7, v8, v9)
+     } else { // on the first run
+       def recompileRun(v0: T0, v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7, v8: T8, v9: T9): Ret =
+         recompile(recompileRun _).asInstanceOf[(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9) => Ret](v0, v1, v2, v3, v4, v5, v6, v7, v8, v9)
+
+       recompileRun(v0, v1, v2, v3, v4, v5, v6, v7, v8, v9)
+     }
+   }
+
    def apply[T0: Manifest, T1: Manifest, T2: Manifest](v0: T0, v1: T1, v2: T2): Ret = {
      def getGuard[T0, T1, T2, Ret]: (T0, T1, T2) => Ret =
        CodeCache.guard(UID)._2.asInstanceOf[(T0, T1, T2) => Ret]
@@ -373,7 +414,8 @@ class TestDynamicCompilation extends FileDiffSuite {
 
       def holeM(x: DenseMatrix[Double], nr: Int): DynMatrix ={
         val mat = holeRep[DenseMatrix[Double]](x, nr)
-        DMatrix(Both(x.cols, mat.m), Both(x.rows, mat.n), mat)
+        println("Hole:" + DMatrix(Both(x.rows, mat.m), Both(x.cols, mat.n), mat))
+        DMatrix(Both(x.rows, mat.m), Both(x.cols, mat.n), mat)
       }
 
       def chain(x: DynMatrix): Rep[DenseMatrix[Double]] = Chain(x)
@@ -403,101 +445,12 @@ class TestDynamicCompilation extends FileDiffSuite {
        case _ => super.emitNode(sym, rhs)
      }
   }
-  /*trait DynMatrixOps extends DynArith { self: DSL =>
-    def toRep(m: Matrix): Rep[test15.Matrix]
-    trait Matrix {
-      def m: Dyn[Int]
-      def n: Dyn[Int]
-      def cost: Dyn[Int]
-
-      def *(that: Matrix): Matrix = {
-        // dassert(this.n == that.m)
-        MatrixMult(this, that)
-      }
-      def +(that: Matrix): Matrix = {
-        // dassert(this.m == that.m && this.n == that.n)
-        MatrixPlus(this, that)
-      }
-    }
-
-    case class NewMatrix(
-      m: Dyn[Int],
-      n: Dyn[Int],
-      data: Rep[Array[Array[Double]]],
-      cost: Dyn[Int] = lift(0)) extends Matrix
-
-    case class MatrixMult(lhs: Matrix, rhs: Matrix) extends Matrix {
-      def m: Dyn[Int] = rhs.m
-      def n: Dyn[Int] = lhs.n
-      def cost: Dyn[Int] = lhs.cost + rhs.cost + lhs.n * rhs.n * rhs.m
-    }
-
-    case class MatrixPlus(lhs: Matrix, rhs: Matrix) extends Matrix {
-      def m: Dyn[Int] = lhs.m
-      def n: Dyn[Int] = rhs.n
-      def cost: Dyn[Int] = lhs.cost + rhs.cost + m * n
-    }
-
-    // TODO need one reduction here
-  }
-
-  trait DynMatrixOpsExp extends DynMatrixOps { self: ImplLike =>
-    case class MatrixCarrier(m: Matrix) extends Def[Matrix]
-    def toRep(m: Matrix): Rep[test15.Matrix] = MatrixCarrier(m)
-  }
-
-  trait GenDynMatrixOps extends GenericCodegen {
-    val IR: DynMatrixOpsExp with Expressions with ImplLike
-    import IR._
-
-    class MatrixOrderOptimization(p: Array[Dyn[Int]]) {
-      val n: Int = p.length - 1
-      val m: scala.Array[scala.Array[Dyn[Int]]] = scala.Array.fill[Dyn[Int]](n, n)(lift(0))
-      val s: scala.Array[scala.Array[Dyn[Int]]] = scala.Array.ofDim[Dyn[Int]](n, n)
-
-      for (ii: Int <- 1 until n; i: Int <- 0 until n - ii) {
-        val j: Int = i + ii
-        m.apply(i).update(j, lift(scala.Int.MaxValue)) // TODO remove ArrayOps
-        for (k <- i until j) {
-          val q: Dyn[Int] = m(i)(k) + m(k + 1)(j) + p(i) * p(k + 1) * p(j + 1)
-          if (q < m(i)(j)) {
-            m(i)(j) = q
-            s(i)(j) = lift(k)
-          }
-        }
-      }
-
-      def optimalChain(m: Array[IR.Matrix]): IR.Matrix = {
-        def optimalChain0(i: Int, j: Int): IR.Matrix =
-          if (i != j) optimalChain0(i, unlift(s(i)(j)))  *  optimalChain0(unlift((s(i)(j) + lift(1))), j)
-          else m(i)
-
-        optimalChain0(0, s.length-1)
-      }
-    }
-
-
-    override def emitNode(sym: Sym[Any], rhs: Def[Any]) = rhs match {
-      case MatrixCarrier(matrices) => // generate multiplication
-        def extractChain(m: IR.Matrix): List[NewMatrix] = m match {
-          case x: NewMatrix => x :: Nil
-          case MatrixMult(m1, m2) => extractChain(m1) ::: extractChain(m2)
-        }
-        val originalChain = extractChain(matrices)
-        val sizes: List[Dyn[Int]] = originalChain.tail
-          .foldLeft(scala.List(originalChain.head.m, originalChain.head.n))((agg, m) => agg :+ m.n)
-        val optimizer = new MatrixOrderOptimization(sizes.toArray)
-        val optimalChain =  optimizer.optimalChain(originalChain.toArray)
-
-      case _ => super.emitNode(sym, rhs)
-    }
-  }*/
 
 
   // staged program implementations
   val prefix = home + "test-out/epfl/test15-"
 
-  /*def testBasicIf = {
+  def testBasicIf = {
     var x = 1
     withOutFileChecked(prefix+"dynamic-basic") {
       class Prog(val UID: Long = 5551L) extends Impl[Int] {
@@ -580,50 +533,61 @@ class TestDynamicCompilation extends FileDiffSuite {
       println((new Prog)(x))
     }
 
-  }*/
+  }
 
   def testMatrixMult = {
 
-    val x = DenseMatrix((1.0,2.0,3.0,4.0, 5.0),
-                        (4.0,5.0,6.0,4.0, 5.0))
-    val y = DenseMatrix((1.0,2.0),
-                        (1.0,2.0),
-                        (1.0,2.0),
-                        (1.0,2.0),
-                        (4.0,5.0))
-    val z = DenseMatrix((1.0,2.0),
-                        (4.0,5.0))
+    def mat(cols: Int, rows: Int) = DenseMatrix.zeros[Double](cols, rows)
+    var x = mat(2, 22)
+    var y = mat(22, 2)
+    var z = mat(2, 2)
 
-    withOutFileChecked(prefix+"basic-matrices") {
+
+
+
+    /*withOutFileChecked(prefix+"basic-matrices") {
       class Prog(val UID: Long = 5553L) extends Impl[DenseMatrix[Double]] {
         def main(): Rep[DenseMatrix[Double]] = {
           val m2 = holeM(x, 1) * holeM(y, 2)
           chain(m2 * holeM(z, 3))
         }
       }
+      println(s"[${x.cols}, ${x.rows}, ${y.rows}, ${z.rows}]")
       println((new Prog)(x, y, z))
-    }
-  }
 
-  /*def testDynamic = {
-    withOutFileChecked(prefix+"dynamic-basic") {
-      trait Prog extends DSL {
-        def main(): Rep[test15.Matrix] = {
-          val mat = Array(
-             Array[Double](unit(1.0),unit(2),unit(3),unit(4),unit(5)),
-             Array[Double](unit(1.0),unit(2),unit(3),unit(4),unit(5)),
-             Array[Double](unit(1.0),unit(2),unit(3),unit(4),unit(5)),
-             Array[Double](unit(1.0),unit(2),unit(3),unit(4),unit(5)),
-             Array[Double](unit(1.0),unit(2),unit(3),unit(4),unit(5))
-           )
-          val x = NewMatrix(lift(2), lift(5), mat)
-          val y = NewMatrix(lift(5), lift(2), mat)
-          val z = NewMatrix(lift(2), lift(2), mat)
-          toRep(x * y * z) // returning it back to LMS. TODO fix this it needs to be integrated. Implement a small code generator.
+      x = mat(3, 22)
+      y = mat(22, 2)
+      z = mat(2, 2)
+
+      println(s"[${x.cols}, ${x.rows}, ${y.rows}, ${z.rows}]")
+      println((new Prog)(x, y, z))
+      x = mat(100, 30)
+      y = mat(30, 500)
+      z = mat(500, 6000)
+      println(s"[${x.cols}, ${x.rows}, ${y.rows}, ${z.rows}]")
+      println((new Prog)(x, y, z))
+      println(s"[${x.cols}, ${x.rows}, ${y.rows}, ${z.rows}]")
+      println((new Prog)(x, y, z))
+
+      x = mat(3, 22)
+      y = mat(22, 2)
+      z = mat(2, 2)
+
+      println(s"[${x.cols}, ${x.rows}, ${y.rows}, ${z.rows}]")
+      println((new Prog)(x, y, z))
+    }*/
+
+
+    var (v0, v1, v2, v3, v4, v5, v6, v7, v8, v9) = (mat(2,2),mat(2,2),mat(2,2),mat(2,2),mat(2,2),mat(2,2),mat(2,2),mat(2,2),mat(2,2),mat(2,2))
+    withOutFileChecked(prefix+"matrices-big") {
+      class Prog(val UID: Long = 5554L) extends Impl[DenseMatrix[Double]] {
+        def main(): Rep[DenseMatrix[Double]] = {
+          chain(holeM(v0, 0) * holeM(v1, 1) * holeM(v2, 2) * holeM(v3, 3) * holeM(v4, 4) * holeM(v5, 5) * holeM(v6, 6) * holeM(v7, 7) * holeM(v8, 8) * holeM(v9, 9))
         }
       }
-      new Prog with Impl
+
+      println((new Prog)(v0, v1, v2, v3, v4, v5, v6, v7, v8, v9))
     }
 
-  }*/
+  }
 }
