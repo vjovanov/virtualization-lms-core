@@ -4,15 +4,251 @@ package common
 import language.dynamics
 import language.experimental.macros
 
-import scala.collection.mutable
 import scala.reflect.macros.whitebox
 import scala.reflect.SourceContext
 
+import collection._
+import collection.mutable
+import collection.immutable
+import collection.generic.CanBuildFrom
+import java.util.concurrent.atomic.AtomicLong
+
+object PrefixMap {
+  def empty[T] = new PrefixMap[T]
+
+  def apply[T](kvs: (String, T)*): PrefixMap[T] = {
+    val m: PrefixMap[T] = empty
+    for (kv <- kvs) m += kv
+    m
+  }
+
+  def newBuilder[T]: mutable.Builder[(String, T), PrefixMap[T]] =
+    new mutable.MapBuilder[String, T, PrefixMap[T]](empty)
+
+  implicit def canBuildFrom[T]
+  : CanBuildFrom[PrefixMap[_], (String, T), PrefixMap[T]] =
+    new CanBuildFrom[PrefixMap[_], (String, T), PrefixMap[T]] {
+      def apply(from: PrefixMap[_]) = newBuilder[T]
+      def apply() = newBuilder[T]
+    }
+}
+
+class PrefixMap[T]
+  extends mutable.Map[String, T]
+  with mutable.MapLike[String, T, PrefixMap[T]] {
+
+  var suffixes: immutable.Map[Char, PrefixMap[T]] = Map.empty
+  var value: Option[T] = None
+
+  def get(s: String): Option[T] =
+    if (s.isEmpty) value
+    else suffixes get s(0) flatMap (_.get(s substring 1))
+
+  def withPrefix(s: String): PrefixMap[T] =
+    if (s.isEmpty) this
+    else {
+      val leading = s(0)
+      suffixes get leading match {
+        case None =>
+          suffixes = suffixes + (leading -> empty)
+        case _ =>
+      }
+      suffixes(leading) withPrefix (s substring 1)
+    }
+
+  override def update(s: String, elem: T) =
+    withPrefix(s).value = Some(elem)
+
+  override def remove(s: String): Option[T] =
+    if (s.isEmpty) { val prev = value; value = None; prev }
+    else suffixes get s(0) flatMap (_.remove(s substring 1))
+
+  def iterator: Iterator[(String, T)] =
+    (for (v <- value.iterator) yield ("", v)) ++
+      (for ((chr, m) <- suffixes.iterator;
+            (s, v) <- m.iterator) yield (chr +: s, v))
+
+  def += (kv: (String, T)): this.type = { update(kv._1, kv._2); this }
+
+  def -= (s: String): this.type  = { remove(s); this }
+
+  override def empty = new PrefixMap[T]
+}
+
+
 object CodeCache {
   type ID = Long
-  val guard: mutable.Map[ID, (Any, Any, Any)] = mutable.Map.empty
-  val code: mutable.Map[(ID, List[Boolean]), Any] = mutable.Map.empty
+  val meta: mutable.Map[ID, (Any, Any)] = mutable.Map.empty
+  val guards: mutable.Map[ID, Any] = mutable.Map.empty
+  val code: mutable.Map[ID, PrefixMap[Any]] = mutable.Map.empty
+  val counters: mutable.Map[(ID, String), AtomicLong] = mutable.Map.empty
+  val minimum: mutable.Map[ID, AtomicLong] = mutable.Map.empty
+
+  final val threshold = 0L
+
+  final def recompileIfMRU[T](id: ID, decs: String, min: Long, x0: Any): T = {
+    val counter = counters(id -> decs)
+    val minimum = CodeCache.minimum(id).get
+    if (counter.incrementAndGet() > minimum + threshold) recompileAndRun[T](id, x0)
+    else (code(id) withPrefix decs.substring(0, decs.length - 1)).head._2.asInstanceOf[(Any) => T].apply(x0)
+  }
+
+  final def recompileIfMRU[T](id: ID, decs: String, min: Long, x0: Any, x1: Any): T = {
+    val counter = counters(id -> decs)
+    val minimum = CodeCache.minimum(id).get
+    if (counter.incrementAndGet() > minimum + threshold) recompileAndRun[T](id, x0, x1)
+    else (code(id) withPrefix decs.substring(0, decs.length - 1)).head._2.asInstanceOf[(Any, Any) => T].apply(x0, x1)
+  }
+
+  final def recompileIfMRU[T](id: ID, decs: String, min: Long, x0: Any, x1: Any, x2: Any): T = {
+    val counter = counters(id -> decs)
+    val minimum = CodeCache.minimum(id).get
+    if (counter.incrementAndGet() > minimum + threshold) CodeCache.recompileAndRun[T](id, x0, x1, x2)
+    else {
+      (code(id) withPrefix decs.substring(0, decs.length - 1)).head._2.asInstanceOf[(Any, Any, Any) => T].apply(x0, x1, x2)
+    }
+  }
+
+  final def recompileIfMRU[T](id: ID, decs: String, min: Long, x0: Any, x1: Any, x2: Any, x3: Any, x4: Any, x5: Any, x6: Any, x7: Any, x8: Any): T = {
+    val counter = counters(id -> decs)
+    val minimum = CodeCache.minimum(id).get
+    if (counter.incrementAndGet() > minimum + threshold) CodeCache.recompileAndRun[T](id, x0, x1, x2, x3, x4, x5, x6, x7, x8)
+    else {
+      (code(id) withPrefix decs).head._1.asInstanceOf[(Any, Any, Any, Any, Any, Any, Any, Any, Any) => T].apply(x0, x1, x2, x3, x4, x5, x6, x7, x8)
+    }
+  }
+
+  final def recompileIfMRU[T](id: ID, decs: String, min: Long, x0: Any, x1: Any, x2: Any, x3: Any, x4: Any, x5: Any, x6: Any, x7: Any, x8: Any, x9: Any): T = {
+    val counter = counters(id -> decs)
+    val minimum = CodeCache.minimum(id).get
+    if (counter.incrementAndGet() > minimum + threshold) CodeCache.recompileAndRun[T](id, x0, x1, x2, x3, x4, x5, x6, x7, x8, x9)
+    else {
+      (code(id) withPrefix decs).head._1.asInstanceOf[(Any, Any, Any, Any, Any, Any, Any, Any, Any, Any) => T].apply(x0, x1, x2, x3, x4, x5, x6, x7, x8, x9)
+    }
+  }
+
+  final def run[T](id: ID, decs: String, x0: Any): T = {
+    val counter = counters(id -> decs).incrementAndGet()
+    val atomicMinimum = CodeCache.minimum(id)
+    val minimum = atomicMinimum.get
+    if (counter == minimum + 1) atomicMinimum.incrementAndGet
+    code(id)(decs).asInstanceOf[(Any) => T](x0)
+  }
+
+  final def run[T](id: ID, decs: String, x0: Any, x1: Any): T = {
+    val counter = counters(id -> decs).incrementAndGet()
+    val atomicMinimum = CodeCache.minimum(id)
+    val minimum = atomicMinimum.get
+    if (counter == minimum + 1) atomicMinimum.incrementAndGet
+    code(id)(decs).asInstanceOf[(Any, Any) => T](x0, x1)
+  }
+
+  final def run[T](id: ID, decs: String, x0: Any, x1: Any, x2: Any): T = {
+    val counter = counters(id -> decs).incrementAndGet()
+    val atomicMinimum = CodeCache.minimum(id)
+    val minimum = atomicMinimum.get
+    if (counter == minimum + 1) atomicMinimum.incrementAndGet
+    code(id)(decs).asInstanceOf[(Any, Any, Any) => T](x0, x1, x2)
+  }
+
+  final def run[T](id: ID, decs: String, x0: Any, x1: Any, x2: Any, x3: Any): T = {
+    val counter = counters(id -> decs).incrementAndGet()
+    val atomicMinimum = CodeCache.minimum(id)
+    val minimum = atomicMinimum.get
+    if (counter == minimum + 1) atomicMinimum.incrementAndGet
+    code(id)(decs).asInstanceOf[(Any, Any, Any, Any) => T](x0, x1, x2, x3)
+  }
+
+  final def run[T](id: ID, decs: String, x0: Any, x1: Any, x2: Any, x3: Any, x4: Any): T = {
+    val counter = counters(id -> decs).incrementAndGet()
+    val atomicMinimum = CodeCache.minimum(id)
+    val minimum = atomicMinimum.get
+    if (counter == minimum + 1) atomicMinimum.incrementAndGet
+    code(id)(decs).asInstanceOf[(Any, Any, Any, Any, Any) => T](x0, x1, x2, x3, x4)
+  }
+
+  final def run[T](id: ID, decs: String, x0: Any, x1: Any, x2: Any, x3: Any, x4: Any, x5: Any): T = {
+    val counter = counters(id -> decs).incrementAndGet()
+    val atomicMinimum = CodeCache.minimum(id)
+    val minimum = atomicMinimum.get
+    if (counter == minimum + 1) atomicMinimum.incrementAndGet
+    code(id)(decs).asInstanceOf[(Any, Any, Any, Any, Any, Any) => T](x0, x1, x2, x3, x4, x5)
+  }
+
+  final def run[T](id: ID, decs: String, x0: Any, x1: Any, x2: Any, x3: Any, x4: Any, x5: Any, x6: Any): T = {
+    val counter = counters(id -> decs).incrementAndGet()
+    val atomicMinimum = CodeCache.minimum(id)
+    val minimum = atomicMinimum.get
+    if (counter == minimum + 1) atomicMinimum.incrementAndGet
+    code(id)(decs).asInstanceOf[(Any, Any, Any, Any, Any, Any, Any) => T](x0, x1, x2, x3, x4, x5, x6)
+  }
+
+  final def run[T](id: ID, decs: String, x0: Any, x1: Any, x2: Any, x3: Any, x4: Any, x5: Any, x6: Any, x7: Any): T = {
+    val counter = counters(id -> decs).incrementAndGet()
+    val atomicMinimum = CodeCache.minimum(id)
+    val minimum = atomicMinimum.get
+    if (counter == minimum + 1) atomicMinimum.incrementAndGet
+    code(id)(decs).asInstanceOf[(Any, Any, Any, Any, Any, Any, Any, Any) => T](x0, x1, x2, x3, x4, x5, x6, x7)
+  }
+
+  final def run[T](id: ID, decs: String, x0: Any, x1: Any, x2: Any, x3: Any, x4: Any, x5: Any, x6: Any, x7: Any, x8: Any): T = {
+    val counter = counters(id -> decs).incrementAndGet()
+    val atomicMinimum = CodeCache.minimum(id)
+    val minimum = atomicMinimum.get
+    if (counter == minimum + 1) atomicMinimum.incrementAndGet
+    code(id)(decs).asInstanceOf[(Any, Any, Any, Any, Any, Any, Any, Any, Any) => T](x0, x1, x2, x3, x4, x5, x6, x7, x8)
+  }
+
+  final def run[T](id: ID, decs: String, x0: Any, x1: Any, x2: Any, x3: Any, x4: Any, x5: Any, x6: Any, x7: Any, x8: Any, x9: Any): T = {
+    val counter = counters(id -> decs).incrementAndGet()
+    val atomicMinimum = CodeCache.minimum(id)
+    val minimum = atomicMinimum.get
+    if (counter == minimum + 1) atomicMinimum.incrementAndGet
+    code(id)(decs).asInstanceOf[(Any, Any, Any, Any, Any, Any, Any, Any, Any, Any) => T](x0, x1, x2, x3, x4, x5, x6, x7, x8, x9)
+  }
+
+  final def recompileAndRun[T](id: ID, x0: Any): T = {
+    meta(id)._1.asInstanceOf[(Any) => T](x0)
+  }
+
+  final def recompileAndRun[T](id: ID, x0: Any, x1: Any): T = {
+    meta(id)._1.asInstanceOf[(Any, Any) => T](x0, x1)
+  }
+
+  final def recompileAndRun[T](id: ID, x0: Any, x1: Any, x2: Any): T = {
+    meta(id)._1.asInstanceOf[(Any, Any, Any) => T](x0, x1, x2)
+  }
+
+  final def recompileAndRun[T](id: ID, x0: Any, x1: Any, x2: Any, x3: Any): T = {
+    meta(id)._1.asInstanceOf[(Any, Any, Any, Any) => T](x0, x1, x2, x3)
+  }
+
+  final def recompileAndRun[T](id: ID, x0: Any, x1: Any, x2: Any, x3: Any, x4: Any): T = {
+    meta(id)._1.asInstanceOf[(Any, Any, Any, Any, Any) => T](x0, x1, x2, x3, x4)
+  }
+
+  final def recompileAndRun[T](id: ID, x0: Any, x1: Any, x2: Any, x3: Any, x4: Any, x5: Any): T = {
+    meta(id)._1.asInstanceOf[(Any, Any, Any, Any, Any, Any) => T](x0, x1, x2, x3, x4, x5)
+  }
+
+  final def recompileAndRun[T](id: ID, x0: Any, x1: Any, x2: Any, x3: Any, x4: Any, x5: Any, x6: Any): T = {
+    meta(id)._1.asInstanceOf[(Any, Any, Any, Any, Any, Any, Any) => T](x0, x1, x2, x3, x4, x5, x6)
+  }
+
+  final def recompileAndRun[T](id: ID, x0: Any, x1: Any, x2: Any, x3: Any, x4: Any, x5: Any, x6: Any, x7: Any): T = {
+    meta(id)._1.asInstanceOf[(Any, Any, Any, Any, Any, Any, Any, Any) => T](x0, x1, x2, x3, x4, x5, x6, x7)
+  }
+
+  final def recompileAndRun[T](id: ID, x0: Any, x1: Any, x2: Any, x3: Any, x4: Any, x5: Any, x6: Any, x7: Any, x8: Any): T = {
+    meta(id)._1.asInstanceOf[(Any, Any, Any, Any, Any, Any, Any, Any, Any) => T](x0, x1, x2, x3, x4, x5, x6, x7, x8)
+  }
+
+  final def recompileAndRun[T](id: ID, x0: Any, x1: Any, x2: Any, x3: Any, x4: Any, x5: Any, x6: Any, x7: Any, x8: Any, x9: Any): T = {
+    meta(id)._1.asInstanceOf[(Any, Any, Any, Any, Any, Any, Any, Any, Any, Any) => T](x0, x1, x2, x3, x4, x5, x6, x7, x8, x9)
+  }
+
 }
+
 
 
 trait DynamicBase extends Base {
@@ -39,6 +275,7 @@ trait DynamicBase extends Base {
 
   protected def holeImpl[T: Manifest](nr: Int): Rep[T]
 
+  def bitString(decs: Iterable[Boolean]): String = decs.map(if(_) "1" else "0").mkString("", "", "")
 }
 
 trait DynamicExp extends internal.Expressions with DynamicBase with BaseExp {
@@ -59,8 +296,10 @@ trait DynamicExp extends internal.Expressions with DynamicBase with BaseExp {
 
   case class Lookup[T](uid: Long, syms: List[Sym[_]], decisions: List[Boolean]) extends Def[T]
   case class Recompile[T](uid: Long, syms: List[Sym[_]], decisions: List[Boolean]) extends Def[T]
+  case class RecompileMRU[T](uid: Long, syms: List[Sym[_]], decisions: List[Boolean], minimum: Long) extends Def[T]
   def emitLookup[T: Manifest](x: List[Sym[_]], decisions: List[Boolean]): Rep[T] = Lookup[T](UID, x, decisions)
   def emitRecompile[T: Manifest](x: List[Sym[_]], decisions: List[Boolean]): Rep[T] = Recompile[T](UID, x, decisions)
+  def emitRecompileMRU[T: Manifest](x: List[Sym[_]], decisions: List[Boolean], minimum: Long): Rep[T] = RecompileMRU[T](UID, x, decisions, minimum)
 
 }
 
@@ -75,10 +314,11 @@ trait DynamicGen extends internal.GenericCodegen {
   override def emitNode(sym: Sym[Any], rhs: Def[Any]) = rhs match {
     case Hole(id) => quote(sym)
     case Lookup(id, syms, decisions) =>
-      emitValDef(sym, s"""scala.virtualization.lms.common.CodeCache.code(($id, ${decisions.toArray.mkString("List(", ",", ")")})).asInstanceOf[(${syms.map(_.tp.toString).mkString("", ", ", "")}) => ${sym.tp.toString}].apply(${syms.map(quote).mkString("",",", "")})""")
+      emitValDef(sym, s"""scala.virtualization.lms.common.CodeCache.run[${sym.tp.toString}]($id, "${bitString(decisions)}", ${syms.map(quote).mkString("",",", "")})""")
     case Recompile(id, syms, decisions) =>
-      stream.println(s"val (recompileRun: ((${syms.map(_.tp.toString).mkString("", ", ", "")}) => ${sym.tp.toString}), _, _) = scala.virtualization.lms.common.CodeCache.guard($UID)")
-      emitValDef(sym, s"recompileRun(${syms.map(quote).mkString("",",", "")})")
+      emitValDef(sym, s"""scala.virtualization.lms.common.CodeCache.recompileAndRun[${sym.tp.toString}]($UID, ${syms.map(quote).mkString("",",", "")})""")
+    case RecompileMRU(id, syms, decisions, minimum) =>
+      emitValDef(sym, s"""scala.virtualization.lms.common.CodeCache.recompileIfMRU[${sym.tp.toString}]($UID, "${bitString(decisions)}", $minimum, ${syms.map(quote).mkString("",",", "")})""")
     case _ => super.emitNode(sym, rhs)
   }
 }
@@ -93,10 +333,19 @@ trait DynIfThenElse extends DynamicBase with IfThenElse {
     var left: Node,
     var right: Node) extends Node
   case class Leaf(decisions: Option[List[Boolean]]) extends Node
+
   var semanticPreserving = false
+  def semanticPreserving[T](b: => T): T = {
+    semanticPreserving = true
+    val res = b
+    semanticPreserving = false
+    res
+  }
+
   def emptyRoot = Leaf(Some(Nil))
   var root: Node = emptyRoot
   var parent: Option[DecisionNode] = None
+
   var decisions: List[Boolean] = Nil
 
   private def makeDecision(cond: Dyn[Boolean]): Unit = {
@@ -144,8 +393,7 @@ trait DynIfThenElse extends DynamicBase with IfThenElse {
     if (cond.static) thenp else elsep
   }
 
-  def __ifThenElse[T:Manifest](cond: Dyn[Boolean], thenp: => Rep[T], elsep: => Rep[T])(implicit pos: SourceContext): Rep[T] = {
-    println("Making decision: " + cond)
+  def __ifThenElse[T:Manifest](cond: Dyn[Boolean], thenp: => Rep[T], elsep: => Rep[T])(implicit pos: SourceContext): Rep[T] = {2
     makeDecision(cond)
     if (cond.static) thenp else elsep
   }

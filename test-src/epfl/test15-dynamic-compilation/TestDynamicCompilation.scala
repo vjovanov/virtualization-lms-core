@@ -23,6 +23,7 @@ import scala.tools.nsc.reporters._
 import scala.tools.nsc.io._
 import breeze.linalg._
 import scala.tools.nsc.interpreter.AbstractFileClassLoader
+import java.util.concurrent.atomic.AtomicLong
 
 trait Compile0 extends BaseExp {
 
@@ -40,10 +41,6 @@ trait DynCompile extends Expressions with DynamicBase with Blocks {
   //var output: ByteArrayOutputStream = _
 
   def setupCompiler() = {
-    /*
-      output = new ByteArrayOutputStream()
-      val writer = new PrintWriter(new OutputStreamWriter(output))
-    */
     val settings = new Settings()
 
     settings.classpath.value = this.getClass.getClassLoader match {
@@ -195,6 +192,7 @@ class TestDynamicCompilation extends FileDiffSuite {
   abstract class Impl[Ret: Manifest] extends ImplLike { self =>
     //override val verbosity = 1
     val UID: Long
+    val cacheSize: Int = 20
     lazy val codegen = new ScalaGenNumericOps with ScalaGenPrimitiveOps with ScalaGenStaticData with ScalaGenOrderingOps with ScalaGenArrayOps
       with ScalaGenVariables with ScalaGenIfThenElse with ScalaGenBooleanOps
       with ScalaGenPrint with ScalaGenEqual with GenMatrixExp with DynamicGen with GenDynMatrixExp { val IR: self.type = self
@@ -214,44 +212,61 @@ class TestDynamicCompilation extends FileDiffSuite {
    def printAndUse(x: Exp[Boolean]): Exp[Boolean] = PEU(x)
 
    private final def constructGuards[T: Manifest]: Rep[T] = {
-      def constructGuards0(current: Node, decisions: List[Boolean]): Rep[T] = current match {
+      def constructGuards0(current: Node, decisions: List[Boolean], semanticPreserving: Boolean, minimum: Long): Rep[T] = current match {
+
         case Leaf(Some(leafDecisions)) => // call function
           assert(leafDecisions == decisions)
-          emitLookup[T](orderedHoles, decisions)
-        case Leaf(None) => // recompile
-          emitRecompile[T](orderedHoles, decisions)
+
+          val counter = CodeCache.counters.get(UID -> bitString(decisions))
+          if(counter.isEmpty)
+            CodeCache.counters.update(UID -> bitString(decisions), new AtomicLong(0L))
+          val count = CodeCache.counters(UID -> bitString(decisions))
+
+          if (count.get >= minimum) emitLookup[T](orderedHoles, decisions)
+          else if (semanticPreserving) emitRecompileMRU[T](orderedHoles, decisions, minimum)
+          else emitRecompile(orderedHoles, decisions)
+
+        case Leaf(None) =>
+
+          val counter = CodeCache.counters.get(UID -> bitString(decisions))
+          if(counter.isEmpty)
+            CodeCache.counters.update(UID -> bitString(decisions), new AtomicLong(0L))
+          val count = CodeCache.counters(UID -> bitString(decisions))
+
+          if (semanticPreserving) emitRecompileMRU[T](orderedHoles, decisions, minimum)
+          else emitRecompile[T](orderedHoles, decisions)
 
         case DecisionNode(tree, semanticPreserving, left, right) =>
-          val thn = constructGuards0(right, decisions :+ true)
-          val els = constructGuards0(left, decisions :+ false)
-          if (printAndUse(tree)) thn else els
+          val thn = constructGuards0(right, decisions :+ true, semanticPreserving, minimum)
+          val els = constructGuards0(left, decisions :+ false, semanticPreserving, minimum)
+          if (tree) thn else els
       }
 
-      constructGuards0(root, Nil)
+      println(s"!!!!!!!!!!!!!!! Minimum of ${CodeCache.counters} $UID")
+      val counters = CodeCache.counters.filter(_._1._1 == UID).map(_._2.get)
+      val minimum = counters.toList.sorted.reverse.take(cacheSize).reverse.headOption.getOrElse(0L)
+
+      CodeCache.minimum.update(UID, new AtomicLong(minimum))
+      println(s"!!!!!!!!!!!!!!! Minimum of $counters is: $minimum")
+      constructGuards0(root, Nil, false, minimum)
    }
-   private final def recompile(run: Any) = {
-      globalDefs.foreach(println)
+   private final def recompile(run: Any): Any = {
       holes.clear()
       decisions = Nil
       parent = None
       val matrixMultTransformer = new MatrixChainTransformer { val IR: self.type = self }
-      if (CodeCache.guard.contains(UID)) {
-        val (_, _, explored) = CodeCache.guard(UID)
-        root = explored
-        println("Root: " + root)
+      if (CodeCache.meta.contains(UID)) {
+        root = CodeCache.meta(UID)._2
         parent = None
       }
       val code: Rep[Ret] = main()
 
       // semantic preserving
-      val transformedCode = matrixMultTransformer(codegen.reifyBlock(code))
+      val transformedCode = semanticPreserving { matrixMultTransformer(codegen.reifyBlock(code)) }
 
       val guards: Rep[Ret] = constructGuards[Ret]
 
       val decs = decisions
-      println("decisions:" + decisions)
-      // TODO for testing purposes
-      println(orderedHoles)
       println("Guard:")
       codegen.emitSource(orderedHoles, codegen.reifyBlock(guards)(manifest[Ret]), "Guard", new PrintWriter(System.out))(manifest[Ret])
       println("Code:")
@@ -260,34 +275,28 @@ class TestDynamicCompilation extends FileDiffSuite {
       val guardFunction = compile[Ret](orderedHoles, guards)(manifest[Ret])
       val function = compileBlock[Ret](orderedHoles, transformedCode)(manifest[Ret])
 
-      CodeCache.code.update((UID, decs), function)
-      CodeCache.guard.update(UID, (run, guardFunction, root))
+      if (!CodeCache.code.contains(UID)) CodeCache.code.update(UID, PrefixMap[Any]())
+      CodeCache.code(UID).update(decs.map(if(_) "1" else "0").mkString("", "", ""), function)
+      CodeCache.guards.update(UID, guardFunction)
+      CodeCache.meta.update(UID, (run, root))
+
       function
     }
 
    def main(): Rep[Ret]
 
-   def apply[T0: Manifest, T1: Manifest, T2: Manifest, T3: Manifest, T4: Manifest, T5: Manifest, T6: Manifest, T7: Manifest, T8: Manifest, T9: Manifest](
-    v0: T0, v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7, v8: T8, v9: T9): Ret = {
-     def getGuard[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, Ret]: (T0, T1, T2, T3, T4, T5, T6, T7, T8, T9) => Ret =
-       CodeCache.guard(UID)._2.asInstanceOf[(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9) => Ret]
-
-     if (CodeCache.guard.contains(UID)) {
-       getGuard[T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, Ret](v0, v1, v2, v3, v4, v5, v6, v7, v8, v9)
+   def apply[T0: Manifest](v0: T0):  Ret = {
+     if (CodeCache.guards.contains(UID)) {
+       CodeCache.guards(UID).asInstanceOf[T0 => Ret](v0)
      } else { // on the first run
-       def recompileRun(v0: T0, v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7, v8: T8, v9: T9): Ret =
-         recompile(recompileRun _).asInstanceOf[(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9) => Ret](v0, v1, v2, v3, v4, v5, v6, v7, v8, v9)
-
-       recompileRun(v0, v1, v2, v3, v4, v5, v6, v7, v8, v9)
+       def recompileRun(v0: T0): Ret = recompile(recompileRun _).asInstanceOf[T0 => Ret](v0)
+       recompileRun(v0)
      }
    }
 
    def apply[T0: Manifest, T1: Manifest, T2: Manifest](v0: T0, v1: T1, v2: T2): Ret = {
-     def getGuard[T0, T1, T2, Ret]: (T0, T1, T2) => Ret =
-       CodeCache.guard(UID)._2.asInstanceOf[(T0, T1, T2) => Ret]
-
-     if (CodeCache.guard.contains(UID)) {
-       getGuard[T0, T1, T2, Ret](v0, v1, v2)
+     if (CodeCache.guards.contains(UID)) {
+       CodeCache.guards(UID).asInstanceOf[(T0, T1, T2) => Ret](v0, v1, v2)
      } else { // on the first run
        def recompileRun(v0: T0, v1: T1, v2: T2): Ret = recompile(recompileRun _).asInstanceOf[(T0, T1, T2) => Ret](v0, v1, v2)
 
@@ -295,16 +304,15 @@ class TestDynamicCompilation extends FileDiffSuite {
      }
    }
 
-   def apply[T0: Manifest](v: T0):  Ret = {
-     def getGuard[T0, Ret]: T0 => Ret =
-       CodeCache.guard(UID)._2.asInstanceOf[T0 => Ret]
-
-     if (CodeCache.guard.contains(UID)) {
-       getGuard[T0, Ret](v)
+   def apply[T0: Manifest, T1: Manifest, T2: Manifest, T3: Manifest, T4: Manifest, T5: Manifest, T6: Manifest, T7: Manifest, T8: Manifest, T9: Manifest](
+    v0: T0, v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7, v8: T8, v9: T9): Ret = {
+     if (CodeCache.guards.contains(UID)) {
+       CodeCache.guards(UID).asInstanceOf[(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9) => Ret](v0, v1, v2, v3, v4, v5, v6, v7, v8, v9)
      } else { // on the first run
-       def recompileRun(v0: T0): Ret = recompile(recompileRun _).asInstanceOf[T0 => Ret](v0)
+       def recompileRun(v0: T0, v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7, v8: T8, v9: T9): Ret =
+         recompile(recompileRun _).asInstanceOf[(T0, T1, T2, T3, T4, T5, T6, T7, T8, T9) => Ret](v0, v1, v2, v3, v4, v5, v6, v7, v8, v9)
 
-       recompileRun(v)
+       recompileRun(v0, v1, v2, v3, v4, v5, v6, v7, v8, v9)
      }
    }
 
@@ -511,26 +519,26 @@ class TestDynamicCompilation extends FileDiffSuite {
   def test3inputs = {
     var (x, y, z) = (1, 2, 3)
     withOutFileChecked(prefix+"dynamic-3inputs") {
-      class Prog(val UID: Long = 5552L) extends Impl[Int] {
+      class Prog(val UID: Long = 5553L) extends Impl[Int] {
         def main(): Rep[Int] = {
           if (hole[Int](x,1) > hole[Int](y,2) + hole[Int](z, 3)) unit(1) else unit(2)
         }
       }
-      println((new Prog)(x))
+      println((new Prog)(x, y, z))
       x = 1
-      println((new Prog)(x))
+      println((new Prog)(x, y, z))
       x = 5
-      println((new Prog)(x))
+      println((new Prog)(x, y, z))
       x = 4
-      println((new Prog)(x))
+      println((new Prog)(x, y, z))
       x = 3
-      println((new Prog)(x))
+      println((new Prog)(x, y, z))
       x = 5
-      println((new Prog)(x))
+      println((new Prog)(x, y, z))
       x = 5
-      println((new Prog)(x))
+      println((new Prog)(x, y, z))
       x = 1
-      println((new Prog)(x))
+      println((new Prog)(x, y, z))
     }
 
   }
@@ -538,6 +546,23 @@ class TestDynamicCompilation extends FileDiffSuite {
   def testMatrixMult = {
 
     def mat(cols: Int, rows: Int) = DenseMatrix.zeros[Double](cols, rows)
+    // distribution is for now the number of different matrices that we make.
+    case class Generator(distribution: Int, maxSize: Int, minSize: Int, chain: Int) {
+      val rand = new scala.util.Random
+      def nextSize: Int = math.abs(rand.nextInt) % (maxSize - minSize) + minSize + 1
+      var (cols, rows) = (nextSize, nextSize)
+      val chains: List[List[DenseMatrix[Double]]] = (0 until distribution).map({ _ =>
+        (0 until chain).map({ _ =>
+        val res = mat(cols, rows)
+        cols = rows
+        rows = nextSize
+        res
+      }).toList}).toList
+
+      def apply(): List[DenseMatrix[Double]] = chains(math.abs(rand.nextInt) % distribution)
+
+    }
+
     var x = mat(2, 22)
     var y = mat(22, 2)
     var z = mat(2, 2)
@@ -546,7 +571,7 @@ class TestDynamicCompilation extends FileDiffSuite {
 
 
     /*withOutFileChecked(prefix+"basic-matrices") {
-      class Prog(val UID: Long = 5553L) extends Impl[DenseMatrix[Double]] {
+      class Prog(val UID: Long = 5554L) extends Impl[DenseMatrix[Double]] {
         def main(): Rep[DenseMatrix[Double]] = {
           val m2 = holeM(x, 1) * holeM(y, 2)
           chain(m2 * holeM(z, 3))
@@ -578,15 +603,103 @@ class TestDynamicCompilation extends FileDiffSuite {
     }*/
 
 
-    var (v0, v1, v2, v3, v4, v5, v6, v7, v8, v9) = (mat(2,2),mat(2,2),mat(2,2),mat(2,2),mat(2,2),mat(2,2),mat(2,2),mat(2,2),mat(2,2),mat(2,2))
+    /*var (v0, v1, v2, v3, v4, v5, v6, v7, v8, v9) = (mat(2,2),mat(2,2),mat(2,2),mat(2,2),mat(2,2),mat(2,2),mat(2,2),mat(2,2),mat(2,2),mat(2,2))
     withOutFileChecked(prefix+"matrices-big") {
-      class Prog(val UID: Long = 5554L) extends Impl[DenseMatrix[Double]] {
+      class Prog(val UID: Long = 5555L) extends Impl[DenseMatrix[Double]] {
         def main(): Rep[DenseMatrix[Double]] = {
           chain(holeM(v0, 0) * holeM(v1, 1) * holeM(v2, 2) * holeM(v3, 3) * holeM(v4, 4) * holeM(v5, 5) * holeM(v6, 6) * holeM(v7, 7) * holeM(v8, 8) * holeM(v9, 9))
         }
       }
 
       println((new Prog)(v0, v1, v2, v3, v4, v5, v6, v7, v8, v9))
+    }*/
+
+    val gen = Generator(10, 3, 5, 20)
+    var chain = gen()
+    var (v0, v1, v2) = (chain(0),chain(1), chain(2))
+    withOutFileChecked(prefix+"matrices-3") {
+      class Prog(val UID: Long = 5556L) extends Impl[DenseMatrix[Double]] {
+        override val cacheSize = 2
+        def main(): Rep[DenseMatrix[Double]] = {
+          chain(holeM(v0, 0) * holeM(v1, 1) * holeM(v2, 2))
+        }
+      }
+
+      println((new Prog)(v0, v1, v2))
+
+      chain = gen()
+      v0 = chain(0)
+      v1 = chain(1)
+      v2 = chain(2)
+      println((new Prog)(v0, v1, v2))
+
+      chain = gen()
+      v0 = chain(0)
+      v1 = chain(1)
+      v2 = chain(2)
+      println((new Prog)(v0, v1, v2))
+
+      chain = gen()
+      v0 = chain(0)
+      v1 = chain(1)
+      v2 = chain(2)
+      println((new Prog)(v0, v1, v2))
+
+      chain = gen()
+      v0 = chain(0)
+      v1 = chain(1)
+      v2 = chain(2)
+      println((new Prog)(v0, v1, v2))
+
+      chain = gen()
+      v0 = chain(0)
+      v1 = chain(1)
+      v2 = chain(2)
+      println((new Prog)(v0, v1, v2))
+
+      chain = gen()
+      v0 = chain(0)
+      v1 = chain(1)
+      v2 = chain(2)
+      println((new Prog)(v0, v1, v2))
+
+
+      chain = gen()
+      v0 = chain(0)
+      v1 = chain(1)
+      v2 = chain(2)
+      println((new Prog)(v0, v1, v2))
+
+      chain = gen()
+      v0 = chain(0)
+      v1 = chain(1)
+      v2 = chain(2)
+      println((new Prog)(v0, v1, v2))
+
+      chain = gen()
+      v0 = chain(0)
+      v1 = chain(1)
+      v2 = chain(2)
+      println((new Prog)(v0, v1, v2))
+
+      chain = gen()
+      v0 = chain(0)
+      v1 = chain(1)
+      v2 = chain(2)
+      println((new Prog)(v0, v1, v2))
+
+
+      chain = gen()
+      v0 = chain(0)
+      v1 = chain(1)
+      v2 = chain(2)
+      println((new Prog)(v0, v1, v2))
+
+      chain = gen()
+      v0 = chain(0)
+      v1 = chain(1)
+      v2 = chain(2)
+      println((new Prog)(v0, v1, v2))
     }
 
   }
