@@ -30,6 +30,19 @@ trait GenericCodegen extends BlockTraversal {
   def getDataStructureHeaders(): String = ""
   def emitTransferFunctions(): Unit = {}
 
+   /**
+   * List of transformers that should be applied before code generation
+   */
+  var transformers: List[AbstractTransformer] = List[AbstractTransformer]()
+
+  def performTransformations[A:Manifest](body: Block[A]): Block[A] = {
+    var transformedBody = body
+    transformers foreach { trans =>
+      transformedBody = trans.apply[A](body.asInstanceOf[trans.IR.Block[A]]).asInstanceOf[this.Block[A]]
+    }
+    transformedBody
+  }
+
   def dataPath = {
     "data" + java.io.File.separator
   }

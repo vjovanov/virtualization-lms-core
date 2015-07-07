@@ -33,16 +33,16 @@ trait Compile0 extends BaseExp {
 
 
 trait DynCompile extends Expressions with DynamicBase with Blocks {
-
+  var filename = "/tmp/last"
   val codegen: ScalaCodegen { val IR: DynCompile.this.type }
 
   var compiler: Global = _
   var reporter: ConsoleReporter = _
   //var output: ByteArrayOutputStream = _
-
+  var measureBytecodeSize = true
   def setupCompiler() = {
     val settings = new Settings()
-
+    // settings.processArguments(List("-optimise"), true)
     settings.classpath.value = this.getClass.getClassLoader match {
       case ctx: java.net.URLClassLoader => ctx.getURLs.map(_.getPath).mkString(":")
       case _ => System.getProperty("java.class.path")
@@ -87,9 +87,15 @@ trait DynCompile extends Expressions with DynamicBase with Blocks {
     val fileSystem = new VirtualDirectory("<vfs>", None)
     compiler.settings.outputDirs.setSingleOutput(fileSystem)
   //      compiler.genJVM.outputDir = fileSystem
-
     run.compileSources(List(new util.BatchSourceFile("<stdin>", source.toString)))
     reporter.printSummary()
+
+    if (fileSystem.iterator.toList.size == 1) { // TODO this is just wrong
+      val out = new java.io.FileOutputStream(filename)
+      out.write(fileSystem.iterator.toList.head.toByteArray)
+      out.close()
+    }
+
 
     if (!reporter.hasErrors)
       println("compilation: ok")
@@ -192,7 +198,7 @@ class TestDynamicCompilation extends FileDiffSuite {
   abstract class Impl[Ret: Manifest] extends ImplLike { self =>
     //override val verbosity = 1
     val UID: Long
-    val cacheSize: Int = 20
+    var cacheSize: Int = 20
     lazy val codegen = new ScalaGenNumericOps with ScalaGenPrimitiveOps with ScalaGenStaticData with ScalaGenOrderingOps with ScalaGenArrayOps
       with ScalaGenVariables with ScalaGenIfThenElse with ScalaGenBooleanOps
       with ScalaGenPrint with ScalaGenEqual with GenMatrixExp with DynamicGen with GenDynMatrixExp { val IR: self.type = self
@@ -262,7 +268,8 @@ class TestDynamicCompilation extends FileDiffSuite {
       val code: Rep[Ret] = main()
 
       // semantic preserving
-      val transformedCode = semanticPreserving { matrixMultTransformer(codegen.reifyBlock(code)) }
+      // val transformedCode = semanticPreserving { matrixMultTransformer(codegen.reifyBlock(code)) }
+      val transformedCode = matrixMultTransformer(codegen.reifyBlock(code))
 
       val guards: Rep[Ret] = constructGuards[Ret]
 
@@ -272,8 +279,12 @@ class TestDynamicCompilation extends FileDiffSuite {
       println("Code:")
       codegen.emitSource(orderedHoles, transformedCode, "Code", new PrintWriter(System.out))(manifest[Ret])
 
+
       val guardFunction = compile[Ret](orderedHoles, guards)(manifest[Ret])
+      val fname = filename
+      filename = "/dev/null"
       val function = compileBlock[Ret](orderedHoles, transformedCode)(manifest[Ret])
+      filename = fname
 
       if (!CodeCache.code.contains(UID)) CodeCache.code.update(UID, PrefixMap[Any]())
       CodeCache.code(UID).update(decs.map(if(_) "1" else "0").mkString("", "", ""), function)
@@ -301,6 +312,69 @@ class TestDynamicCompilation extends FileDiffSuite {
        def recompileRun(v0: T0, v1: T1, v2: T2): Ret = recompile(recompileRun _).asInstanceOf[(T0, T1, T2) => Ret](v0, v1, v2)
 
        recompileRun(v0, v1, v2)
+     }
+   }
+
+   def apply[T0: Manifest, T1: Manifest, T2: Manifest, T3: Manifest](v0: T0, v1: T1, v2: T2, v3: T3): Ret = {
+     if (CodeCache.guards.contains(UID)) {
+       CodeCache.guards(UID).asInstanceOf[(T0, T1, T2, T3) => Ret](v0, v1, v2, v3)
+     } else { // on the first run
+       def recompileRun(v0: T0, v1: T1, v2: T2, v3: T3): Ret = recompile(recompileRun _).asInstanceOf[(T0, T1, T2, T3) => Ret](v0, v1, v2, v3)
+
+       recompileRun(v0, v1, v2, v3)
+     }
+   }
+
+   def apply[T0: Manifest, T1: Manifest, T2: Manifest, T3: Manifest, T4: Manifest](v0: T0, v1: T1, v2: T2, v3: T3, v4: T4): Ret = {
+     if (CodeCache.guards.contains(UID)) {
+       CodeCache.guards(UID).asInstanceOf[(T0, T1, T2, T3, T4) => Ret](v0, v1, v2, v3, v4)
+     } else { // on the first run
+       def recompileRun(v0: T0, v1: T1, v2: T2, v3: T3, v4: T4): Ret = recompile(recompileRun _).asInstanceOf[(T0, T1, T2, T3, T4) => Ret](v0, v1, v2, v3, v4)
+
+       recompileRun(v0, v1, v2, v3, v4)
+     }
+   }
+
+   def apply[T0: Manifest, T1: Manifest, T2: Manifest, T3: Manifest, T4: Manifest, T5: Manifest](v0: T0, v1: T1, v2: T2, v3: T3, v4: T4, v5: T5): Ret = {
+     if (CodeCache.guards.contains(UID)) {
+       CodeCache.guards(UID).asInstanceOf[(T0, T1, T2, T3, T4, T5) => Ret](v0, v1, v2, v3, v4, v5)
+     } else { // on the first run
+       def recompileRun(v0: T0, v1: T1, v2: T2, v3: T3, v4: T4, v5: T5): Ret = recompile(recompileRun _).asInstanceOf[(T0, T1, T2, T3, T4, T5) => Ret](v0, v1, v2, v3, v4, v5)
+
+       recompileRun(v0, v1, v2, v3, v4, v5)
+     }
+   }
+
+   def apply[T0: Manifest, T1: Manifest, T2: Manifest, T3: Manifest, T4: Manifest, T5: Manifest, T6: Manifest](v0: T0, v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6): Ret = {
+     if (CodeCache.guards.contains(UID)) {
+       CodeCache.guards(UID).asInstanceOf[(T0, T1, T2, T3, T4, T5, T6) => Ret](v0, v1, v2, v3, v4, v5, v6)
+     } else { // on the first run
+       def recompileRun(v0: T0, v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6): Ret = recompile(recompileRun _).asInstanceOf[(T0, T1, T2, T3, T4, T5, T6) => Ret](v0, v1, v2, v3, v4, v5, v6)
+
+       recompileRun(v0, v1, v2, v3, v4, v5, v6)
+     }
+   }
+
+   def apply[T0: Manifest, T1: Manifest, T2: Manifest, T3: Manifest, T4: Manifest, T5: Manifest, T6: Manifest, T7: Manifest](v0: T0, v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7): Ret = {
+     if (CodeCache.guards.contains(UID)) {
+       CodeCache.guards(UID).asInstanceOf[(T0, T1, T2, T3, T4, T5, T6, T7) => Ret](v0, v1, v2, v3, v4, v5, v6, v7)
+     } else { // on the first run
+       def recompileRun(v0: T0, v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7): Ret = recompile(recompileRun _).asInstanceOf[(T0, T1, T2, T3, T4, T5, T6, T7) => Ret](v0, v1, v2, v3, v4, v5, v6, v7)
+
+       recompileRun(v0, v1, v2, v3, v4, v5, v6, v7)
+     }
+   }
+
+
+   def apply[T0: Manifest, T1: Manifest, T2: Manifest, T3: Manifest, T4: Manifest, T5: Manifest, T6: Manifest, T7: Manifest, T8: Manifest](
+    v0: T0, v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7, v8: T8): Ret = {
+     if (CodeCache.guards.contains(UID)) {
+       CodeCache.guards(UID).asInstanceOf[(T0, T1, T2, T3, T4, T5, T6, T7, T8) => Ret](v0, v1, v2, v3, v4, v5, v6, v7, v8)
+     } else { // on the first run
+       def recompileRun(v0: T0, v1: T1, v2: T2, v3: T3, v4: T4, v5: T5, v6: T6, v7: T7, v8: T8): Ret =
+         recompile(recompileRun _).asInstanceOf[(T0, T1, T2, T3, T4, T5, T6, T7, T8) => Ret](v0, v1, v2, v3, v4, v5, v6, v7, v8)
+
+       recompileRun(v0, v1, v2, v3, v4, v5, v6, v7, v8)
      }
    }
 
@@ -484,7 +558,7 @@ class TestDynamicCompilation extends FileDiffSuite {
 
   }
 
-  def testpow = {
+  /*def testpow = {
     var x = 1
     withOutFileChecked(prefix+"dynamic-pow") {
       class Prog(val UID: Long = 5552L) extends Impl[Int] {
@@ -541,11 +615,9 @@ class TestDynamicCompilation extends FileDiffSuite {
       println((new Prog)(x, y, z))
     }
 
-  }
+  }*/
 
-  def testMatrixMult = {
-
-    def mat(cols: Int, rows: Int) = DenseMatrix.zeros[Double](cols, rows)
+  def mat(cols: Int, rows: Int) = DenseMatrix.zeros[Double](cols, rows)
     // distribution is for now the number of different matrices that we make.
     case class Generator(distribution: Int, maxSize: Int, minSize: Int, chain: Int) {
       val rand = new scala.util.Random
@@ -561,7 +633,9 @@ class TestDynamicCompilation extends FileDiffSuite {
 
       def apply(): List[DenseMatrix[Double]] = chains(math.abs(rand.nextInt) % distribution)
 
-    }
+  }
+
+  def testMatrixMult = {
 
     var x = mat(2, 22)
     var y = mat(22, 2)
@@ -603,7 +677,7 @@ class TestDynamicCompilation extends FileDiffSuite {
     }*/
 
 
-    /*var (v0, v1, v2, v3, v4, v5, v6, v7, v8, v9) = (mat(2,2),mat(2,2),mat(2,2),mat(2,2),mat(2,2),mat(2,2),mat(2,2),mat(2,2),mat(2,2),mat(2,2))
+    var (v0, v1, v2, v3, v4, v5, v6, v7, v8, v9) = (mat(2,2),mat(2,2),mat(2,2),mat(2,2),mat(2,2),mat(2,2),mat(2,2),mat(2,2),mat(2,2),mat(2,2))
     withOutFileChecked(prefix+"matrices-big") {
       class Prog(val UID: Long = 5555L) extends Impl[DenseMatrix[Double]] {
         def main(): Rep[DenseMatrix[Double]] = {
@@ -612,12 +686,14 @@ class TestDynamicCompilation extends FileDiffSuite {
       }
 
       println((new Prog)(v0, v1, v2, v3, v4, v5, v6, v7, v8, v9))
-    }*/
+    }
 
-    val gen = Generator(10, 3, 5, 20)
+    val gen = Generator(distribution = 80, 20, 50, 10)
     var chain = gen()
-    var (v0, v1, v2) = (chain(0),chain(1), chain(2))
-    withOutFileChecked(prefix+"matrices-3") {
+    v0 = chain(0)
+    v1 = chain(1)
+    v2 = chain(2)
+    /*withOutFileChecked(prefix+"matrices-3") {
       class Prog(val UID: Long = 5556L) extends Impl[DenseMatrix[Double]] {
         override val cacheSize = 2
         def main(): Rep[DenseMatrix[Double]] = {
@@ -700,7 +776,378 @@ class TestDynamicCompilation extends FileDiffSuite {
       v1 = chain(1)
       v2 = chain(2)
       println((new Prog)(v0, v1, v2))
+    }*/
+  }
+
+
+  // 1) How much bytecode do the guards take for different sizes of multiplication?
+  //   - for [1, 10, 100] explored paths
+  /*def testBytecode() = {
+    var (v0, v1, v2, v3, v4, v5, v6, v7, v8, v9) = (mat(2,2),mat(2,2),mat(2,2),mat(2,2),mat(2,2),mat(2,2),mat(2,2),mat(2,2),mat(2,2),mat(2,2))
+    class Prog10(val UID: Long = 10555L) extends Impl[DenseMatrix[Double]] {
+      def main(): Rep[DenseMatrix[Double]] = {
+        chain(holeM(v0, 0) * holeM(v1, 1) * holeM(v2, 2) * holeM(v3, 3) * holeM(v4, 4) * holeM(v5, 5) * holeM(v6, 6) * holeM(v7, 7) * holeM(v8, 8) * holeM(v9, 9))
+      }
+    }
+
+    class Prog9(val UID: Long = 95555L) extends Impl[DenseMatrix[Double]] {
+      def main(): Rep[DenseMatrix[Double]] = {
+        chain(holeM(v0, 0) * holeM(v1, 1) * holeM(v2, 2) * holeM(v3, 3) * holeM(v4, 4) * holeM(v5, 5) * holeM(v6, 6) * holeM(v7, 7) * holeM(v8, 8))
+      }
+    }
+
+    class Prog8(val UID: Long = 85555L) extends Impl[DenseMatrix[Double]] {
+      def main(): Rep[DenseMatrix[Double]] = {
+        chain(holeM(v0, 0) * holeM(v1, 1) * holeM(v2, 2) * holeM(v3, 3) * holeM(v4, 4) * holeM(v5, 5) * holeM(v6, 6) * holeM(v7, 7))
+      }
+    }
+
+    class Prog7(val UID: Long = 75555L) extends Impl[DenseMatrix[Double]] {
+      def main(): Rep[DenseMatrix[Double]] = {
+        chain(holeM(v0, 0) * holeM(v1, 1) * holeM(v2, 2) * holeM(v3, 3) * holeM(v4, 4) * holeM(v5, 5) * holeM(v6, 6))
+      }
+    }
+
+    class Prog6(val UID: Long = 65555L) extends Impl[DenseMatrix[Double]] {
+      def main(): Rep[DenseMatrix[Double]] = {
+        chain(holeM(v0, 0) * holeM(v1, 1) * holeM(v2, 2) * holeM(v3, 3) * holeM(v4, 4) * holeM(v5, 5))
+      }
+    }
+
+    class Prog5(val UID: Long = 55555L) extends Impl[DenseMatrix[Double]] {
+      def main(): Rep[DenseMatrix[Double]] = {
+        chain(holeM(v0, 0) * holeM(v1, 1) * holeM(v2, 2) * holeM(v3, 3) * holeM(v4, 4))
+      }
+    }
+
+    class Prog4(val UID: Long = 45555L) extends Impl[DenseMatrix[Double]] {
+      def main(): Rep[DenseMatrix[Double]] = {
+        chain(holeM(v0, 0) * holeM(v1, 1) * holeM(v2, 2) * holeM(v3, 3))
+      }
+    }
+
+    class Prog3(val UID: Long = 35555L) extends Impl[DenseMatrix[Double]] {
+      def main(): Rep[DenseMatrix[Double]] = {
+        chain(holeM(v0, 0) * holeM(v1, 1) * holeM(v2, 2))
+      }
+    }
+
+    def generate(paths: List[Int], name: String, setFilename: String => Unit)(b: => Unit): Unit = {
+      val gen = Generator(1000, 2, 20, 10)
+      // set the variable for generation
+      def setValues(): Unit = {
+        var chain = gen()
+        v0 = chain(0)
+        v1 = chain(1)
+        v2 = chain(2)
+        v3 = chain(3)
+        v4 = chain(4)
+        v5 = chain(5)
+        v6 = chain(6)
+        v7 = chain(7)
+        v8 = chain(8)
+        v9 = chain(9)
+      }
+
+      var i = 1
+      val max = paths.max
+      while(i <= paths.max) {
+        setValues()
+        setFilename(name + "-" + i + ".class")
+        b
+        i += 1
+      }
+    }
+    withOutFileChecked(prefix+"matrices-bytecode") {
+      val prog3 =new Prog3
+      prog3.cacheSize = 100
+      generate(List(1,20), "/tmp/prog3", s => prog3.filename = s)(prog3(v0, v1, v2))
+
+      val prog4 =new Prog4
+      prog4.cacheSize = 100
+      generate(List(1,20), "/tmp/prog4", s => prog4.filename = s)(prog4(v0, v1, v2, v3))
+
+      val prog5 =new Prog5
+      prog5.cacheSize = 100
+      generate(List(1,100), "/tmp/prog5", s => prog5.filename = s)(prog5(v0, v1, v2, v3, v4))
+
+      val prog6 =new Prog6
+      prog6.cacheSize = 100
+      generate(List(1,20), "/tmp/prog6", s => prog6.filename = s)(prog6(v0, v1, v2, v3, v4, v5))
+
+      val prog7 =new Prog7
+      prog7.cacheSize = 100
+      generate(List(1,20), "/tmp/prog7", s => prog7.filename = s)(prog7(v0, v1, v2, v3, v4, v5, v6))
+
+      val prog8 =new Prog8
+      prog8.cacheSize = 200
+      generate(List(1,20), "/tmp/prog8", s => prog8.filename = s)(prog8(v0, v1, v2, v3, v4, v5, v6, v7))
+    }
+
+  }*/
+
+
+  // 2) How long do the guards run for different sizes of multiplication?
+  //   - 1 10 20 all explored paths
+  def testTime() = {
+    var (v0, v1, v2, v3, v4, v5, v6, v7, v8, v9) = (mat(2,2),mat(2,2),mat(2,2),mat(2,2),mat(2,2),mat(2,2),mat(2,2),mat(2,2),mat(2,2),mat(2,2))
+    class Prog10(val UID: Long = 110555L) extends Impl[DenseMatrix[Double]] {
+      def main(): Rep[DenseMatrix[Double]] = {
+        chain(holeM(v0, 0) * holeM(v1, 1) * holeM(v2, 2) * holeM(v3, 3) * holeM(v4, 4) * holeM(v5, 5) * holeM(v6, 6) * holeM(v7, 7) * holeM(v8, 8) * holeM(v9, 9))
+      }
+    }
+
+    class Prog9(val UID: Long = 195555L) extends Impl[DenseMatrix[Double]] {
+      def main(): Rep[DenseMatrix[Double]] = {
+        chain(holeM(v0, 0) * holeM(v1, 1) * holeM(v2, 2) * holeM(v3, 3) * holeM(v4, 4) * holeM(v5, 5) * holeM(v6, 6) * holeM(v7, 7) * holeM(v8, 8))
+      }
+    }
+
+    class Prog8(val UID: Long = 185555L) extends Impl[DenseMatrix[Double]] {
+      def main(): Rep[DenseMatrix[Double]] = {
+        chain(holeM(v0, 0) * holeM(v1, 1) * holeM(v2, 2) * holeM(v3, 3) * holeM(v4, 4) * holeM(v5, 5) * holeM(v6, 6) * holeM(v7, 7))
+      }
+    }
+
+    class Prog7(val UID: Long = 175555L) extends Impl[DenseMatrix[Double]] {
+      def main(): Rep[DenseMatrix[Double]] = {
+        chain(holeM(v0, 0) * holeM(v1, 1) * holeM(v2, 2) * holeM(v3, 3) * holeM(v4, 4) * holeM(v5, 5) * holeM(v6, 6))
+      }
+    }
+
+    class Prog6(val UID: Long = 165555L) extends Impl[DenseMatrix[Double]] {
+      def main(): Rep[DenseMatrix[Double]] = {
+        chain(holeM(v0, 0) * holeM(v1, 1) * holeM(v2, 2) * holeM(v3, 3) * holeM(v4, 4) * holeM(v5, 5))
+      }
+    }
+
+    class Prog5(val UID: Long = 155555L) extends Impl[DenseMatrix[Double]] {
+      def main(): Rep[DenseMatrix[Double]] = {
+        chain(holeM(v0, 0) * holeM(v1, 1) * holeM(v2, 2) * holeM(v3, 3) * holeM(v4, 4))
+      }
+    }
+
+    class Prog4(val UID: Long = 145555L) extends Impl[DenseMatrix[Double]] {
+      def main(): Rep[DenseMatrix[Double]] = {
+        chain(holeM(v0, 0) * holeM(v1, 1) * holeM(v2, 2) * holeM(v3, 3))
+      }
+    }
+
+    class Prog3(val UID: Long = 135555L) extends Impl[DenseMatrix[Double]] {
+      def main(): Rep[DenseMatrix[Double]] = {
+        chain(holeM(v0, 0) * holeM(v1, 1) * holeM(v2, 2))
+      }
+    }
+
+    def generate(paths: List[Int], name: String, setFilename: String => Unit)(b: => DenseMatrix[Double]): Unit = {
+      val gen = Generator(1000, 2, 20, 10)
+      // set the variable for generation
+      def setValues(): Unit = {
+        var chain = gen()
+        v0 = chain(0)
+        v1 = chain(1)
+        v2 = chain(2)
+        v3 = chain(3)
+        v4 = chain(4)
+        v5 = chain(5)
+        v6 = chain(6)
+        v7 = chain(7)
+        v8 = chain(8)
+        v9 = chain(9)
+      }
+
+      var i = 1
+      val max = paths.max
+      while(i <= paths.max) {
+        setValues()
+        setFilename(name + "-" + i + ".class")
+        for (j <- 0 until 30000) { // warmup
+          b
+        }
+        var sum: Long = 0
+
+        for (j <- 0 until 10000) { // warmup
+          val startTime = System.nanoTime
+          b
+          val time = CodeCache.time - startTime
+          sum += time
+        }
+
+        println(s"Elapsed time ($name-$i): " + (sum / 10000))
+        i += 1
+      }
+    }
+    withOutFileChecked(prefix+"matrices-timings") {
+      val prog3 =new Prog3
+      prog3.cacheSize = 100
+      generate(List(1,10), "/tmp/prog3", s => prog3.filename = s)(prog3(v0, v1, v2))
+
+      val prog4 =new Prog4
+      prog4.cacheSize = 100
+      generate(List(1,10), "/tmp/prog4", s => prog4.filename = s)(prog4(v0, v1, v2, v3))
+
+      val prog5 =new Prog5
+      prog5.cacheSize = 100
+      generate(List(1,10), "/tmp/prog5", s => prog5.filename = s)(prog5(v0, v1, v2, v3, v4))
+
+      val prog6 =new Prog6
+      prog6.cacheSize = 100
+      generate(List(1,10), "/tmp/prog6", s => prog6.filename = s)(prog6(v0, v1, v2, v3, v4, v5))
+
+      val prog7 =new Prog7
+      prog7.cacheSize = 100
+      generate(List(1,10), "/tmp/prog7", s => prog7.filename = s)(prog7(v0, v1, v2, v3, v4, v5, v6))
+
+      val prog8 =new Prog8
+      prog8.cacheSize = 200
+      generate(List(1,9), "/tmp/prog8", s => prog8.filename = s)(prog8(v0, v1, v2, v3, v4, v5, v6, v7))
     }
 
   }
+  // 3) With one stable input?
+  def testUnstable() = {
+    var (v0, v1, v2, v3, v4, v5, v6, v7, v8, v9) = (mat(2,2),mat(2,2),mat(2,2),mat(2,2),mat(2,2),mat(2,2),mat(2,2),mat(2,2),mat(2,2),mat(2,2))
+    class Prog10(val UID: Long = 1110555L) extends Impl[DenseMatrix[Double]] {
+      def main(): Rep[DenseMatrix[Double]] = {
+        chain(holeM(v0, 0) * holeM(v1, 1) * holeM(v2, 2) * holeM(v3, 3) * holeM(v4, 4) * holeM(v5, 5) * holeM(v6, 6) * holeM(v7, 7) * holeM(v8, 8) * holeM(v9, 9))
+      }
+    }
+
+    class Prog9(val UID: Long = 1195555L) extends Impl[DenseMatrix[Double]] {
+      def main(): Rep[DenseMatrix[Double]] = {
+        chain(holeM(v0, 0) * holeM(v1, 1) * holeM(v2, 2) * holeM(v3, 3) * holeM(v4, 4) * holeM(v5, 5) * holeM(v6, 6) * holeM(v7, 7) * holeM(v8, 8))
+      }
+    }
+
+    class Prog8(val UID: Long = 1185555L) extends Impl[DenseMatrix[Double]] {
+      def main(): Rep[DenseMatrix[Double]] = {
+        chain(holeM(v0, 0) * holeM(v1, 1) * holeM(v2, 2) * holeM(v3, 3) * holeM(v4, 4) * holeM(v5, 5) * holeM(v6, 6) * holeM(v7, 7))
+      }
+    }
+
+    class Prog7(val UID: Long = 1175555L) extends Impl[DenseMatrix[Double]] {
+      def main(): Rep[DenseMatrix[Double]] = {
+        chain(holeM(v0, 0) * holeM(v1, 1) * holeM(v2, 2) * holeM(v3, 3) * holeM(v4, 4) * holeM(v5, 5) * holeM(v6, 6))
+      }
+    }
+
+    class Prog6(val UID: Long = 1165555L) extends Impl[DenseMatrix[Double]] {
+      def main(): Rep[DenseMatrix[Double]] = {
+        chain(holeM(v0, 0) * holeM(v1, 1) * holeM(v2, 2) * holeM(v3, 3) * holeM(v4, 4) * holeM(v5, 5))
+      }
+    }
+
+    class Prog5(val UID: Long = 1155555L) extends Impl[DenseMatrix[Double]] {
+      def main(): Rep[DenseMatrix[Double]] = {
+        chain(holeM(v0, 0) * holeM(v1, 1) * holeM(v2, 2) * holeM(v3, 3) * holeM(v4, 4))
+      }
+    }
+
+    class Prog4(val UID: Long = 1145555L) extends Impl[DenseMatrix[Double]] {
+      def main(): Rep[DenseMatrix[Double]] = {
+        chain(holeM(v0, 0) * holeM(v1, 1) * holeM(v2, 2) * holeM(v3, 3))
+      }
+    }
+
+    class Prog3(val UID: Long = 1135555L) extends Impl[DenseMatrix[Double]] {
+      def main(): Rep[DenseMatrix[Double]] = {
+        chain(holeM(v0, 0) * holeM(v1, 1) * holeM(v2, 2))
+      }
+    }
+    case class Generator(distribution: Int, maxSize: Int, minSize: Int, chain: Int) {
+      val rand = new scala.util.Random
+      def nextSize: Int = math.abs(rand.nextInt) % (maxSize - minSize) + minSize + 1
+      var (cols, rows) = (nextSize, nextSize)
+      val chains: List[(List[DenseMatrix[Double]], List[DenseMatrix[Double]])] = (0 until distribution).map({ _ =>
+        (0 until chain).map({ _ =>
+        val res = (mat(cols, rows), mat(cols+1, rows+1))
+        cols = rows
+        rows = nextSize
+        res
+      }).toList.unzip}).toList
+
+      def apply(nr: Int, index: Int): List[DenseMatrix[Double]] = if (nr == 1)
+       chains(math.abs(index) % distribution)._1
+      else chains(math.abs(index) % distribution)._2
+
+  }
+    def generate(paths: List[Int], name: String, setFilename: String => Unit)(b: => DenseMatrix[Double]): Unit = {
+      val gen = Generator(1000, 2, 20, 10)
+      // set the variable for generation
+      def setValues(index: Int, nr: Int): Unit = {
+        var chain = gen(index, nr)
+        v0 = chain(0)
+        v1 = chain(1)
+        v2 = chain(2)
+        v3 = chain(3)
+        v4 = chain(4)
+        v5 = chain(5)
+        v6 = chain(6)
+        v7 = chain(7)
+        v8 = chain(8)
+        v9 = chain(9)
+      }
+
+      var i = 1
+      val max = paths.max
+      while(i <= paths.max) {
+        val index = gen.rand.nextInt
+
+        setFilename(name + "-" + i + ".class")
+        for (j <- 0 until 30000) { // warmup
+          setValues(index, 1)
+          b
+          setValues(index, 2)
+          b
+        }
+        var sum: Long = 0
+
+        for (j <- 0 until 10000) { // warmup
+          setValues(index, 1)
+          val startTime = System.nanoTime
+          b
+          val time = CodeCache.time - startTime
+          setValues(index, 2)
+          b
+          sum += time
+        }
+
+        println(s"Elapsed time ($name-$i): " + (sum / 10000))
+        i += 1
+      }
+    }
+    withOutFileChecked(prefix+"matrices-timings-unstable") {
+      val prog3 =new Prog3
+      prog3.cacheSize = 100
+      generate(List(1,10), "/tmp/prog3", s => prog3.filename = s)(prog3(v0, v1, v2))
+
+      val prog4 =new Prog4
+      prog4.cacheSize = 100
+      generate(List(1,10), "/tmp/prog4", s => prog4.filename = s)(prog4(v0, v1, v2, v3))
+
+      val prog5 =new Prog5
+      prog5.cacheSize = 100
+      generate(List(1,10), "/tmp/prog5", s => prog5.filename = s)(prog5(v0, v1, v2, v3, v4))
+
+      val prog6 =new Prog6
+      prog6.cacheSize = 100
+      generate(List(1,10), "/tmp/prog6", s => prog6.filename = s)(prog6(v0, v1, v2, v3, v4, v5))
+
+      val prog7 =new Prog7
+      prog7.cacheSize = 100
+      generate(List(1,10), "/tmp/prog7", s => prog7.filename = s)(prog7(v0, v1, v2, v3, v4, v5, v6))
+
+      val prog8 =new Prog8
+      prog8.cacheSize = 200
+      generate(List(1,9), "/tmp/prog8", s => prog8.filename = s)(prog8(v0, v1, v2, v3, v4, v5, v6, v7))
+    }
+
+  }
+  // This goes tomorrow during the talks!
+  // 4) How do they compare to the interpreter?
+  // 5) How do they compare to the interpreter for a uniform distribution?
+
+
+  // 1) Make all 10 programs
+  // 2) Program 2
 }

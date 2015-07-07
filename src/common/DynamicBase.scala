@@ -78,6 +78,7 @@ class PrefixMap[T]
 
 object CodeCache {
   type ID = Long
+  var time: Long = 0
   val meta: mutable.Map[ID, (Any, Any)] = mutable.Map.empty
   val guards: mutable.Map[ID, Any] = mutable.Map.empty
   val code: mutable.Map[ID, PrefixMap[Any]] = mutable.Map.empty
@@ -109,6 +110,51 @@ object CodeCache {
     }
   }
 
+  final def recompileIfMRU[T](id: ID, decs: String, min: Long, x0: Any, x1: Any, x2: Any, x3: Any): T = {
+    val counter = counters(id -> decs)
+    val minimum = CodeCache.minimum(id).get
+    if (counter.incrementAndGet() > minimum + threshold) CodeCache.recompileAndRun[T](id, x0, x1, x2, x3)
+    else {
+      (code(id) withPrefix decs.substring(0, decs.length - 1)).head._2.asInstanceOf[(Any, Any, Any, Any) => T].apply(x0, x1, x2, x3)
+    }
+  }
+
+  final def recompileIfMRU[T](id: ID, decs: String, min: Long, x0: Any, x1: Any, x2: Any, x3: Any, x4: Any): T = {
+    val counter = counters(id -> decs)
+    val minimum = CodeCache.minimum(id).get
+    if (counter.incrementAndGet() > minimum + threshold) CodeCache.recompileAndRun[T](id, x0, x1, x2, x3, x4)
+    else {
+      (code(id) withPrefix decs.substring(0, decs.length - 1)).head._2.asInstanceOf[(Any, Any, Any, Any, Any) => T].apply(x0, x1, x2, x3, x4)
+    }
+  }
+
+  final def recompileIfMRU[T](id: ID, decs: String, min: Long, x0: Any, x1: Any, x2: Any, x3: Any, x4: Any, x5: Any): T = {
+    val counter = counters(id -> decs)
+    val minimum = CodeCache.minimum(id).get
+    if (counter.incrementAndGet() > minimum + threshold) CodeCache.recompileAndRun[T](id, x0, x1, x2, x3, x4, x5)
+    else {
+      (code(id) withPrefix decs.substring(0, decs.length - 1)).head._2.asInstanceOf[(Any, Any, Any, Any, Any, Any) => T].apply(x0, x1, x2, x3, x4, x5)
+    }
+  }
+
+  final def recompileIfMRU[T](id: ID, decs: String, min: Long, x0: Any, x1: Any, x2: Any, x3: Any, x4: Any, x5: Any, x6: Any): T = {
+    val counter = counters(id -> decs)
+    val minimum = CodeCache.minimum(id).get
+    if (counter.incrementAndGet() > minimum + threshold) CodeCache.recompileAndRun[T](id, x0, x1, x2, x3, x4, x5, x6)
+    else {
+      (code(id) withPrefix decs.substring(0, decs.length - 1)).head._2.asInstanceOf[(Any, Any, Any, Any, Any, Any, Any) => T].apply(x0, x1, x2, x3, x4, x5, x6)
+    }
+  }
+
+  final def recompileIfMRU[T](id: ID, decs: String, min: Long, x0: Any, x1: Any, x2: Any, x3: Any, x4: Any, x5: Any, x6: Any, x7: Any): T = {
+    val counter = counters(id -> decs)
+    val minimum = CodeCache.minimum(id).get
+    if (counter.incrementAndGet() > minimum + threshold) CodeCache.recompileAndRun[T](id, x0, x1, x2, x3, x4, x5, x6, x7)
+    else {
+      (code(id) withPrefix decs.substring(0, decs.length - 1)).head._2.asInstanceOf[(Any, Any, Any, Any, Any, Any, Any, Any) => T].apply(x0, x1, x2, x3, x4, x5, x6, x7)
+    }
+  }
+
   final def recompileIfMRU[T](id: ID, decs: String, min: Long, x0: Any, x1: Any, x2: Any, x3: Any, x4: Any, x5: Any, x6: Any, x7: Any, x8: Any): T = {
     val counter = counters(id -> decs)
     val minimum = CodeCache.minimum(id).get
@@ -132,7 +178,9 @@ object CodeCache {
     val atomicMinimum = CodeCache.minimum(id)
     val minimum = atomicMinimum.get
     if (counter == minimum + 1) atomicMinimum.incrementAndGet
-    code(id)(decs).asInstanceOf[(Any) => T](x0)
+    val c = code(id)(decs)
+    CodeCache.time = System.nanoTime
+    c.asInstanceOf[(Any) => T](x0)
   }
 
   final def run[T](id: ID, decs: String, x0: Any, x1: Any): T = {
@@ -140,7 +188,9 @@ object CodeCache {
     val atomicMinimum = CodeCache.minimum(id)
     val minimum = atomicMinimum.get
     if (counter == minimum + 1) atomicMinimum.incrementAndGet
-    code(id)(decs).asInstanceOf[(Any, Any) => T](x0, x1)
+    val c = code(id)(decs)
+    CodeCache.time = System.nanoTime
+    c.asInstanceOf[(Any, Any) => T](x0, x1)
   }
 
   final def run[T](id: ID, decs: String, x0: Any, x1: Any, x2: Any): T = {
@@ -148,7 +198,9 @@ object CodeCache {
     val atomicMinimum = CodeCache.minimum(id)
     val minimum = atomicMinimum.get
     if (counter == minimum + 1) atomicMinimum.incrementAndGet
-    code(id)(decs).asInstanceOf[(Any, Any, Any) => T](x0, x1, x2)
+    val c = code(id)(decs)
+    CodeCache.time = System.nanoTime
+    c.asInstanceOf[(Any, Any, Any) => T](x0, x1, x2)
   }
 
   final def run[T](id: ID, decs: String, x0: Any, x1: Any, x2: Any, x3: Any): T = {
@@ -156,7 +208,9 @@ object CodeCache {
     val atomicMinimum = CodeCache.minimum(id)
     val minimum = atomicMinimum.get
     if (counter == minimum + 1) atomicMinimum.incrementAndGet
-    code(id)(decs).asInstanceOf[(Any, Any, Any, Any) => T](x0, x1, x2, x3)
+    val c = code(id)(decs)
+    CodeCache.time = System.nanoTime
+    c.asInstanceOf[(Any, Any, Any, Any) => T](x0, x1, x2, x3)
   }
 
   final def run[T](id: ID, decs: String, x0: Any, x1: Any, x2: Any, x3: Any, x4: Any): T = {
@@ -164,7 +218,9 @@ object CodeCache {
     val atomicMinimum = CodeCache.minimum(id)
     val minimum = atomicMinimum.get
     if (counter == minimum + 1) atomicMinimum.incrementAndGet
-    code(id)(decs).asInstanceOf[(Any, Any, Any, Any, Any) => T](x0, x1, x2, x3, x4)
+    val c = code(id)(decs)
+    CodeCache.time = System.nanoTime
+    c.asInstanceOf[(Any, Any, Any, Any, Any) => T](x0, x1, x2, x3, x4)
   }
 
   final def run[T](id: ID, decs: String, x0: Any, x1: Any, x2: Any, x3: Any, x4: Any, x5: Any): T = {
@@ -172,7 +228,9 @@ object CodeCache {
     val atomicMinimum = CodeCache.minimum(id)
     val minimum = atomicMinimum.get
     if (counter == minimum + 1) atomicMinimum.incrementAndGet
-    code(id)(decs).asInstanceOf[(Any, Any, Any, Any, Any, Any) => T](x0, x1, x2, x3, x4, x5)
+    val c = code(id)(decs)
+    CodeCache.time = System.nanoTime
+    c.asInstanceOf[(Any, Any, Any, Any, Any, Any) => T](x0, x1, x2, x3, x4, x5)
   }
 
   final def run[T](id: ID, decs: String, x0: Any, x1: Any, x2: Any, x3: Any, x4: Any, x5: Any, x6: Any): T = {
@@ -180,7 +238,9 @@ object CodeCache {
     val atomicMinimum = CodeCache.minimum(id)
     val minimum = atomicMinimum.get
     if (counter == minimum + 1) atomicMinimum.incrementAndGet
-    code(id)(decs).asInstanceOf[(Any, Any, Any, Any, Any, Any, Any) => T](x0, x1, x2, x3, x4, x5, x6)
+    val c = code(id)(decs)
+    CodeCache.time = System.nanoTime
+    c.asInstanceOf[(Any, Any, Any, Any, Any, Any, Any) => T](x0, x1, x2, x3, x4, x5, x6)
   }
 
   final def run[T](id: ID, decs: String, x0: Any, x1: Any, x2: Any, x3: Any, x4: Any, x5: Any, x6: Any, x7: Any): T = {
@@ -188,7 +248,9 @@ object CodeCache {
     val atomicMinimum = CodeCache.minimum(id)
     val minimum = atomicMinimum.get
     if (counter == minimum + 1) atomicMinimum.incrementAndGet
-    code(id)(decs).asInstanceOf[(Any, Any, Any, Any, Any, Any, Any, Any) => T](x0, x1, x2, x3, x4, x5, x6, x7)
+    val c = code(id)(decs)
+    CodeCache.time = System.nanoTime
+    c.asInstanceOf[(Any, Any, Any, Any, Any, Any, Any, Any) => T](x0, x1, x2, x3, x4, x5, x6, x7)
   }
 
   final def run[T](id: ID, decs: String, x0: Any, x1: Any, x2: Any, x3: Any, x4: Any, x5: Any, x6: Any, x7: Any, x8: Any): T = {
@@ -196,7 +258,9 @@ object CodeCache {
     val atomicMinimum = CodeCache.minimum(id)
     val minimum = atomicMinimum.get
     if (counter == minimum + 1) atomicMinimum.incrementAndGet
-    code(id)(decs).asInstanceOf[(Any, Any, Any, Any, Any, Any, Any, Any, Any) => T](x0, x1, x2, x3, x4, x5, x6, x7, x8)
+    val c = code(id)(decs)
+    CodeCache.time = System.nanoTime
+    c.asInstanceOf[(Any, Any, Any, Any, Any, Any, Any, Any, Any) => T](x0, x1, x2, x3, x4, x5, x6, x7, x8)
   }
 
   final def run[T](id: ID, decs: String, x0: Any, x1: Any, x2: Any, x3: Any, x4: Any, x5: Any, x6: Any, x7: Any, x8: Any, x9: Any): T = {
@@ -204,7 +268,9 @@ object CodeCache {
     val atomicMinimum = CodeCache.minimum(id)
     val minimum = atomicMinimum.get
     if (counter == minimum + 1) atomicMinimum.incrementAndGet
-    code(id)(decs).asInstanceOf[(Any, Any, Any, Any, Any, Any, Any, Any, Any, Any) => T](x0, x1, x2, x3, x4, x5, x6, x7, x8, x9)
+    val c = code(id)(decs)
+    CodeCache.time = System.nanoTime
+    c.asInstanceOf[(Any, Any, Any, Any, Any, Any, Any, Any, Any, Any) => T](x0, x1, x2, x3, x4, x5, x6, x7, x8, x9)
   }
 
   final def recompileAndRun[T](id: ID, x0: Any): T = {
